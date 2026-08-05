@@ -1,0 +1,24 @@
+# Dependencies & Node Modules
+node_modules/
+**/node_modules/
+
+# Build Outputs
+dist/
+**/dist/
+target/
+**/target/
+.vercel/
+**/.vercel/
+AetherDesk-Distribution-Package/
+
+# Databases & Local Logs
+*.db
+*.db-journal
+*.log
+**/*.log
+
+# Environment & Temp Files
+.env
+.env.local
+.DS_Store
+Thumbs.db
