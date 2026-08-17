@@ -38,6 +38,21 @@ async function seedDefaultAdmin() {
 seedDefaultAdmin();
 
 import { SubscriptionController } from './controllers/subscriptionController';
+import { SecurityController } from './controllers/securityController';
+
+// Seed initial demo security alert if empty
+function seedDemoSecurityAlerts() {
+  const alertCount: any = db.prepare('SELECT count(*) as count FROM security_alerts').get();
+  if (alertCount.count === 0) {
+    db.prepare(`
+      INSERT INTO security_alerts (id, device_id, device_name, alert_type, severity, details, status)
+      VALUES 
+        ('sec_01', 'dev_02', 'Finance Workstation 04', 'TROJAN_PREVENTION', 'HIGH', 'Blocked suspicious process injection attempt (unauthorized DLL hook)', 'ACTIVE'),
+        ('sec_02', 'dev_01', 'HQ Server Room 01', 'INTEGRITY_TAMPER', 'MEDIUM', 'SHA-256 binary fingerprint verified clean on boot', 'RESOLVED')
+    `).run();
+  }
+}
+seedDemoSecurityAlerts();
 
 // --- Auth Routes ---
 app.post('/api/auth/register', AuthController.register);
@@ -55,6 +70,12 @@ app.post('/api/devices', authMiddleware, DeviceController.addDevice);
 app.delete('/api/devices/:id', authMiddleware, DeviceController.removeDevice);
 app.get('/api/devices/installer-token', authMiddleware, DeviceController.generateInstallerToken);
 app.get('/api/admin/session-logs', authMiddleware, requireRole('ADMIN'), DeviceController.listSessionLogs);
+
+// --- System Admin Security & Threat Telemetry Routes ---
+app.get('/api/admin/security/alerts', authMiddleware, requireRole('ADMIN'), SecurityController.getAlerts);
+app.post('/api/admin/security/resolve', authMiddleware, requireRole('ADMIN'), SecurityController.resolveAlert);
+app.post('/api/security/telemetry', SecurityController.receiveTelemetry);
+
 
 // --- Health Route ---
 app.get('/api/health', (req, res) => {

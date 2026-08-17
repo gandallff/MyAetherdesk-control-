@@ -31,6 +31,17 @@ export interface Device {
   last_seen: string;
 }
 
+export interface SecurityAlert {
+  id: string;
+  device_id: string;
+  device_name: string;
+  alert_type: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  details: string;
+  status: 'ACTIVE' | 'RESOLVED' | 'QUARANTINED';
+  created_at: string;
+}
+
 export class ApiService {
   private static getToken(): string | null {
     return localStorage.getItem('aether_token');
@@ -114,4 +125,16 @@ export class ApiService {
       body: JSON.stringify({ plan }),
     });
   }
+
+  public static getSecurityAlerts(): Promise<{ alerts: SecurityAlert[]; stats: { total_alerts: number; critical_count: number; active_count: number } }> {
+    return this.request('/admin/security/alerts');
+  }
+
+  public static resolveSecurityAlert(alert_id: string, action: 'RESOLVE' | 'QUARANTINE'): Promise<{ success: boolean }> {
+    return this.request('/admin/security/resolve', {
+      method: 'POST',
+      body: JSON.stringify({ alert_id, action }),
+    });
+  }
 }
+

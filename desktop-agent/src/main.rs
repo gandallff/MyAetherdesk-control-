@@ -12,7 +12,7 @@ use capture::{
 };
 use input::{win_input::Win32InputInjector, InputInjector, RemoteInputEvent};
 use network::{direct_listener::DirectIPListener, signaling_client::SignalingClient};
-use security::auth::UnattendedAuth;
+use security::{auth::UnattendedAuth, guard::SecurityGuard};
 use service::autostart::AutoStartManager;
 
 #[tokio::main]
@@ -29,8 +29,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = AutoStartManager::enable_autostart(&exe_path.to_string_lossy());
     }
 
+    // 0b. Start Background Security Guard & Trojan Monitoring
+    let security_guard = SecurityGuard::new();
+    security_guard.start_monitoring("dev_01".to_string(), "HQ Server Room 01".to_string()).await;
+
     // 1. Initialize Unattended Password Security
     let _auth = UnattendedAuth::new("aether2026");
+
 
     // 2. Start Direct IP:Port Listener (Port 8443)
     let direct_listener = DirectIPListener::new(8443);

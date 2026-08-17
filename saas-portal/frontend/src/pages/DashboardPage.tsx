@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService, Device, User } from '../services/api';
 import { PricingModal } from '../components/PricingModal';
+import { SecurityDashboardModal } from '../components/SecurityDashboardModal';
 import { LanguageSelector } from '../components/LanguageSelector';
-import { Monitor, Plus, Download, Trash2, Power, Zap, RefreshCw, Crown, ExternalLink, Network } from 'lucide-react';
+import { Monitor, Plus, Download, Trash2, Power, Zap, RefreshCw, Crown, ExternalLink, Network, ShieldCheck } from 'lucide-react';
 
 interface DashboardPageProps {
   user: User;
@@ -15,9 +16,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPricingOpen, setIsPricingOpen] = useState(false);
+  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [directIp, setDirectIp] = useState('192.168.1.100');
+
 
   const fetchDevices = async () => {
     setLoading(true);
@@ -88,6 +91,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
         <div className="flex items-center space-x-3">
           <LanguageSelector />
 
+          {user.role === 'ADMIN' && (
+            <button
+              onClick={() => setIsSecurityOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs border border-emerald-500/30 flex items-center space-x-1.5 transition-all shadow-sm"
+              title="System Admin Security Guard"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Security Guard</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsPricingOpen(true)}
             className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 flex items-center space-x-1.5 transition-all"
@@ -95,6 +109,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
             <Crown className="w-3.5 h-3.5" />
             <span>Upgrade Plan</span>
           </button>
+
 
           <div className="text-right hidden sm:block">
             <div className="text-xs font-semibold text-slate-200">{user.name}</div>
@@ -293,7 +308,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
         }}
       />
 
+      {/* Security Dashboard Modal */}
+      <SecurityDashboardModal
+        isOpen={isSecurityOpen}
+        onClose={() => setIsSecurityOpen(false)}
+      />
+
       {/* Footer Status */}
+
       <footer className="pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-500 font-mono">
         <div>AetherDesk SaaS Portal v1.0.0</div>
         <div>REST API: http://localhost:5000/api</div>

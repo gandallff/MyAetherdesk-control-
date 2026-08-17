@@ -43,6 +43,18 @@ db.exec(`
     ended_at DATETIME,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS security_alerts (
+    id TEXT PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    device_name TEXT NOT NULL,
+    alert_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    details TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
+
 
 console.log('[SQLite DB] Commercial SaaS Database Schema initialized at:', dbPath);

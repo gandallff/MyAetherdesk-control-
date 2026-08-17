@@ -1,66 +1,39 @@
-# ⚡ AetherDesk: Enterprise Low-Latency Remote Desktop & Commercial SaaS Platform
+# ⚡ AetherDesk Remote Control & Commercial SaaS Platform
 
-**AetherDesk** is an enterprise-grade, high-performance, low-latency remote desktop control, file transfer, and device management platform engineered as a commercial alternative to AnyDesk, TeamViewer, and RustDesk.
-
----
-
-## 🌟 Key System Capabilities
-
-- **⚡ GPU-Accelerated Screen Capture**: Windows **DXGI Desktop Duplication API** capture under 5ms latency at **60 FPS** with **Dirty Region** bandwidth optimization.
-- **🎮 Native Input Injection**: Win32 **`SendInput`** synthesis for high-precision mouse tracking, wheel scrolling, and virtual key code mapping.
-- **📡 Dual Connection Modes**:
-  - **9-Digit Session ID**: Global WebRTC P2P connection via central WebSocket Signaling Server (`ws://localhost:8080`).
-  - **Direct IP:Port Listener**: Zero-server LAN / VPN direct P2P socket listener (`0.0.0.0:8443`).
-- **📁 64KB Binary File Transfer Engine**: Bi-directional file transfer over WebRTC `RTCDataChannel` (SCTP) with dynamic backpressure (`bufferedAmount`) and SHA-256 integrity verification.
-- **🔑 Unattended Access & System Auto-Start**: Windows Registry (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`) auto-boot background service.
-- **💼 Commercial SaaS Portal (`saas-portal/`)**:
-  - **User & Company Auth**: JWT authentication, bcrypt password hashing, Role-Based Access Control (`ADMIN` vs `USER`).
-  - **Live Address Book & Device Manager**: Real-time online/offline status indicators with **1-Click Connect**.
-  - **Commercial Pricing Tiers**: Free QuickSupport vs Pro Solo ($15/mo) vs Enterprise Team ($49/mo) with subscription checkout.
+AetherDesk, yüksek performanslı **Rust tabanlı DXGI GPU ekran yakalama**, ultra düşük gecikmeli **WebRTC sinyalleşmesi**, ticari **SaaS üyelik modelleri** ve **Vercel / GitHub entegreli bulut yayın mimarisi** sunan kurumsal uzaktan masaüstü ve cihaz yönetim platformudur.
 
 ---
 
-## 📁 Subsystem Directory Structure
+## 🌐 Canlı Sistem ve Bulut Bağlantıları (Live Production Links)
 
-```
-AetherDesk_RemoteControl/
-├── signaling-server/         # TypeScript WebSocket 9-digit Session ID router
-├── desktop-agent/            # Native Rust GPU DXGI capture & SendInput driver
-├── web-viewer/               # React + Tailwind low-latency WebRTC viewer (Port 9000)
-├── saas-portal/
-│   ├── backend/              # Express REST API & SQLite Database (Port 5000)
-│   └── frontend/             # Commercial Marketing Landing & SaaS Console (Port 9090)
-├── start_all_services.bat    # Master 1-Click System Launcher Script
-├── build_release_package.bat # Distribution Release Packager Script
-├── README.md                 # Project Overview & QuickStart Guide
-├── CONTEXT.md                # Architectural Context & Business Requirements
-└── IMPLEMENTATION.md         # In-Depth Technical Subsystem Breakdown
-```
+| Bileşen | Canlı Adres / Bağlantı | Durum |
+| :--- | :--- | :--- |
+| 🚀 **Vercel Canlı SaaS Portalı** | **[https://aetherdesk-saas-portal-nine.vercel.app](https://aetherdesk-saas-portal-nine.vercel.app)** | 🟢 7/24 YAYINDA |
+| 🐙 **GitHub Resmi Deposu** | **[https://github.com/gandalff/AetherDesk](https://github.com/gandalff/AetherDesk)** | 🟢 CANLI |
+| 🎛️ **Master Yönetim Merkezi** | **[AetherDesk-Control-Center.bat](file:///c:/Users/QALab/Desktop/App_DataControl/AetherDesk_RemoteControl/AetherDesk-Control-Center.bat)** | 🟢 MASAÜSTÜ GUI |
 
 ---
 
-## 🚀 Quick Start (Tek Tıkla Çalıştırma)
+## 🎛️ Tek Merkezden Yönetim (`AetherDesk-Control-Center.bat`)
 
-### 1. Launch All Ecosystem Services
-Double-click **`start_all_services.bat`** in the root directory to launch all 4 background services:
+Proje kök dizininde bulunan **[AetherDesk-Control-Center.bat](file:///c:/Users/QALab/Desktop/App_DataControl/AetherDesk_RemoteControl/AetherDesk-Control-Center.bat)** dosyası, tüm ekosistemi pencereli arayüz ile yönetir:
 
-```bash
-# Or run manually in separate terminals:
-1. Signaling Server: cd signaling-server && npm run dev (ws://localhost:8080)
-2. SaaS Backend API: cd saas-portal/backend && npm run dev (http://localhost:5000/api)
-3. Web Viewer UI    : cd web-viewer && npm run dev -- --port 9000 (http://localhost:9000)
-4. SaaS Console UI  : cd saas-portal/frontend && npm run dev (http://localhost:9090)
-```
-
-### 2. Default Login Credentials
-- **SaaS Console URL**: `http://localhost:9090`
-- **Email**: `admin@aetherdesk.com`
-- **Password**: `admin2026`
+- **`[1] TÜM SERVİSLERİ BAŞLAT`**: 4 Yerel Servis + Cloudflare Tünelini aynı anda çalıştırır.
+- **`[2] BULUTA YAYINLA (DEPLOY)`**: Önce GitHub reposunu günceller, ardından Vercel canlı bulut sitesini yayınlar. Görsel **Progress Bar (%10-%100)** ve işlem sonu **Popup Bildirimi** sunar.
+- **`[3] MÜŞTERİ DESTEK ARACI`**: İstemci bilgisayarlarda 9 Haneli ID, LAN IP tespiti ve tek tıkla kopyalama sunan GUI aracını açar.
+- **`[4] KURULUM SİHİRBAZI`**: 1-Tıkla Windows Kurulum Sihirbazı formunu açar.
 
 ---
 
-## 🔒 Security Architecture
+## 🚀 Öne Çıkan Kurumsal Özellikler
 
-- **TLS 1.3 & DTLS-SRTP**: End-to-end media and data channel encryption.
-- **AES-256-GCM**: Payload-level chunk encryption.
-- **Salted Hash Unattended Access**: Secure password authentication for headless servers.
+1. **Ultra Düşük Gecikme (60 FPS DXGI GPU Capture)**:
+   - Rust dilinde yazılmış GPU bellek kopyalama (`DXGI Desktop Duplication API`) ve NVENC donanım ivmeli H.264 video kodlama.
+2. **Ticari SaaS ve Abonelik Modelleri**:
+   - Ücretsiz QuickSupport, Pro Solo ($15/ay) ve Enterprise Team ($49/ay) üyelik katmanları, 1-tıkla ödeme simülasyonu modalı.
+3. **Çok Dilli (TR / EN) Ön Yüz**:
+   - Türkçe Varsayılan dil seçeneği ve tek tıkla İngilizce (`🇹🇷 TR / 🇬🇧 EN`) geçiş imkanı.
+4. **Yerel Ağ (LAN IP) Tespiti ve İkili Kopyalama**:
+   - Ajan çalıştırıldığında yerel IPv4 adresini (Örn: `192.168.1.105:8443`) otomatik algılar ve tek tıkla kopyalama imkanı sunar.
+5. **Windows Defender Güvenlik Duvarı Yöneticisi**:
+   - 8443, 8080, 9000, 9090 ve WebRTC portları için otomatik kural ekleme.

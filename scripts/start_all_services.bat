@@ -12,19 +12,19 @@ echo.
 
 :: 1. Launch Signaling Server (Port 8080)
 echo [*] 1. Starting WebSocket Signaling Server (Port 8080)...
-start "AetherDesk Signaling Server (Port 8080)" cmd /k "cd /d %~dp0signaling-server && npm run dev"
+start "AetherDesk Signaling Server (Port 8080)" cmd /k "cd /d %~dp0..\signaling-server && npm run dev"
 
 :: 2. Launch SaaS Backend REST API (Port 5000)
 echo [*] 2. Starting SaaS Backend REST API (Port 5000)...
-start "AetherDesk SaaS Backend API (Port 5000)" cmd /k "cd /d %~dp0saas-portal\backend && npm run dev"
+start "AetherDesk SaaS Backend API (Port 5000)" cmd /k "cd /d %~dp0..\saas-portal\backend && npm run dev"
 
 :: 3. Launch Web Viewer Remote Control UI (Port 9000)
 echo [*] 3. Starting Web Viewer Control UI (Port 9000)...
-start "AetherDesk Web Viewer (Port 9000)" cmd /k "cd /d %~dp0web-viewer && npm run dev -- --port 9000"
+start "AetherDesk Web Viewer (Port 9000)" cmd /k "cd /d %~dp0..\web-viewer && npm run dev"
 
 :: 4. Launch SaaS Management Portal Dashboard (Port 9090)
 echo [*] 4. Starting SaaS Management Console (Port 9090)...
-start "AetherDesk SaaS Console (Port 9090)" cmd /k "cd /d %~dp0saas-portal\frontend && npm run dev"
+start "AetherDesk SaaS Console (Port 9090)" cmd /k "cd /d %~dp0..\saas-portal\frontend && npm run dev"
 
 :: 5. Launch Global Cloudflare Tunnel for Inter-Network Connect
 echo [*] 5. Starting Global Internet Tunnel (Cloudflare Tunnel)...

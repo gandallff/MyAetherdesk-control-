@@ -1,4 +1,4 @@
-# AetherDesk Master Control Center GUI Form with Live Progress Bar
+# AetherDesk Master Control Center GUI Form (Ultra-Smooth Async UI)
 [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
 [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing") | Out-Null
 
@@ -79,12 +79,12 @@ function Write-Log($msg) {
     $txtLog.AppendText("`r`n[" + (Get-Date -Format "HH:mm:ss") + "] " + $msg)
     $txtLog.SelectionStart = $txtLog.Text.Length
     $txtLog.ScrollToCaret()
-    $form.Refresh()
+    [System.Windows.Forms.Application]::DoEvents()
 }
 
 function Set-Progress($val) {
     $pBar.Value = [Math]::Min(100, [Math]::Max(0, $val))
-    $form.Refresh()
+    [System.Windows.Forms.Application]::DoEvents()
 }
 
 $btn2.Add_Click({
@@ -115,10 +115,18 @@ $btn2.Add_Click({
 
     Write-Log "=== 2/2: VERCEL CANLI YAYINI BASLATILDI ==="
     Set-Progress 70
+    Write-Log "Vercel uretim paketi derleniyor ve buluta aktariliyor..."
     Set-Location "$rootDir\saas-portal\frontend"
     Set-Progress 80
-    npx --yes vercel --prod --yes | Out-Null
-    Set-Progress 90
+
+    # Execute Vercel command asynchronously while pumping UI events
+    $process = Start-Process -FilePath "npx.cmd" -ArgumentList "vercel --prod --yes" -NoNewWindow -PassThru
+    while (!$process.HasExited) {
+        Start-Sleep -Milliseconds 200
+        [System.Windows.Forms.Application]::DoEvents()
+    }
+
+    Set-Progress 95
     Set-Location "$rootDir"
     
     Set-Progress 100
