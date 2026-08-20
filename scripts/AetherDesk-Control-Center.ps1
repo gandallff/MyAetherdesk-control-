@@ -79,7 +79,7 @@ $btn1.FlatStyle = "Flat"
 $btn1.Location  = New-Object System.Drawing.Point(30, 80)
 $btn1.Size      = New-Object System.Drawing.Size(235, 42)
 $btn1.Add_Click({
-    Write-Log "Tum sistem servisleri ve tunel baslatiliyor..."
+    Write-Log "Servisler baslatiliyor ve yukleme sayfasi aciliyor..."
     Start-Process cmd -ArgumentList "/c `"$scriptDir\start_all_services.bat`""
 })
 $form.Controls.Add($btn1)

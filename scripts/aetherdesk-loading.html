@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AetherDesk — Başlatılıyor...</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #060b17;
+      --surface:   #0d1526;
+      --border:    #1e2d4a;
+      --blue:      #3b82f6;
+      --indigo:    #6366f1;
+      --green:     #10b981;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --glow-blue: rgba(59,130,246,.25);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ── animated mesh background ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(59,130,246,.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(99,102,241,.10) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* ── grid lines ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    .wrapper {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 40px; padding: 32px 16px;
+    }
+
+    /* ── logo ── */
+    .logo-area { text-align: center; }
+    .logo-icon {
+      width: 72px; height: 72px;
+      margin: 0 auto 16px;
+      background: linear-gradient(135deg, var(--blue), var(--indigo));
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      box-shadow: 0 0 40px var(--glow-blue);
+      animation: pulse-glow 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%,100% { box-shadow: 0 0 30px var(--glow-blue); }
+      50%      { box-shadow: 0 0 60px rgba(99,102,241,.4); }
+    }
+    .logo-title {
+      font-size: 28px; font-weight: 800;
+      background: linear-gradient(90deg, #60a5fa, #818cf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .logo-sub {
+      margin-top: 6px;
+      font-size: 13px; color: var(--muted); font-weight: 400;
+      letter-spacing: .5px;
+    }
+
+    /* ── card container ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 36px;
+      width: 100%; max-width: 520px;
+      backdrop-filter: blur(12px);
+    }
+
+    .card-title {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--muted); margin-bottom: 24px;
+    }
+
+    /* ── service rows ── */
+    .services { display: flex; flex-direction: column; gap: 14px; }
+
+    .svc-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      transition: border-color .4s, background .4s;
+    }
+    .svc-row.ready   { border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.06); }
+    .svc-row.waiting { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.05); }
+    .svc-row.error   { border-color: rgba(239,68,68,.35);  background: rgba(239,68,68,.05); }
+
+    .svc-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+
+    .svc-info { flex: 1; }
+    .svc-name { font-size: 14px; font-weight: 600; }
+    .svc-url  { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: monospace; }
+
+    .svc-badge {
+      font-size: 11px; font-weight: 700; padding: 4px 10px;
+      border-radius: 99px; letter-spacing: .5px;
+      transition: all .4s;
+      white-space: nowrap;
+    }
+    .badge-idle    { background: rgba(100,116,139,.2); color: var(--muted); }
+    .badge-spin    { background: rgba(245,158,11,.2);  color: #f59e0b; animation: blink .9s ease-in-out infinite; }
+    .badge-ok      { background: rgba(16,185,129,.2);  color: #10b981; }
+    .badge-fail    { background: rgba(239,68,68,.2);   color: #ef4444; }
+
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .4; }
+    }
+
+    /* ── spinner icon ── */
+    .spin { display: inline-block; animation: rotate 1s linear infinite; }
+    @keyframes rotate { to { transform: rotate(360deg); } }
+
+    /* ── overall progress bar ── */
+    .progress-wrap {
+      margin-top: 28px;
+    }
+    .progress-label {
+      display: flex; justify-content: space-between;
+      font-size: 12px; color: var(--muted); margin-bottom: 8px;
+    }
+    .progress-track {
+      height: 6px; border-radius: 99px;
+      background: rgba(255,255,255,.06);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--blue), var(--indigo));
+      width: 0%;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+      box-shadow: 0 0 10px var(--glow-blue);
+    }
+
+    /* ── status footer ── */
+    .status-line {
+      margin-top: 20px;
+      font-size: 13px; color: var(--muted);
+      text-align: center; min-height: 20px;
+      transition: color .3s;
+    }
+    .status-line.go { color: var(--green); font-weight: 600; }
+
+    /* ── redirect countdown ── */
+    .redirect-box {
+      display: none;
+      margin-top: 28px; padding: 18px 24px;
+      border-radius: 14px;
+      background: rgba(16,185,129,.08);
+      border: 1px solid rgba(16,185,129,.3);
+      text-align: center;
+    }
+    .redirect-box.show { display: block; animation: fadeIn .5s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .redirect-count { font-size: 32px; font-weight: 800; color: var(--green); }
+    .redirect-text  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    /* ── open button ── */
+    .btn-open {
+      display: none;
+      margin-top: 12px; padding: 12px 32px;
+      border: none; border-radius: 10px; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 700;
+      background: linear-gradient(135deg, var(--blue), var(--indigo));
+      color: white;
+      box-shadow: 0 4px 20px var(--glow-blue);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .btn-open:hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--glow-blue); }
+    .btn-open.show  { display: inline-block; animation: fadeIn .5s ease .3s both; }
+
+    .footer-note {
+      font-size: 11px; color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Logo -->
+  <div class="logo-area">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-title">AetherDesk</div>
+    <div class="logo-sub">Remote Control Platform — Başlatılıyor</div>
+  </div>
+
+  <!-- Service cards -->
+  <div class="card">
+    <div class="card-title">Servis Durumu</div>
+    <div class="services" id="services"></div>
+
+    <!-- Progress -->
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span>Genel İlerleme</span>
+        <span id="pct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="fill"></div>
+      </div>
+    </div>
+
+    <!-- Status message -->
+    <div class="status-line" id="statusLine">Servisler kontrol ediliyor...</div>
+
+    <!-- Redirect countdown -->
+    <div class="redirect-box" id="redirectBox">
+      <div class="redirect-count" id="countNum">3</div>
+      <div class="redirect-text">saniye içinde SaaS Dashboard açılıyor...</div>
+    </div>
+
+    <!-- Manual open button -->
+    <div style="text-align:center">
+      <button class="btn-open" id="btnOpen" onclick="openDash()">🚀 Dashboard'u Aç</button>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Hazır olmayan servisler varsa sayfa yine de açılır — <br/>
+    bağlantı hatası durumunda birkaç saniye bekleyin.
+  </div>
+
+</div>
+
+<script>
+const SERVICES = [
+  { id:'signaling', name:'Signaling Server',   url:'http://localhost:8080', icon:'📡', color:'#8b5cf6', label:'ws://8080' },
+  { id:'backend',   name:'SaaS Backend API',   url:'http://localhost:5000', icon:'🔑', color:'#3b82f6', label:'http://5000' },
+  { id:'webview',   name:'Web Viewer UI',       url:'http://localhost:9000', icon:'🖥️', color:'#06b6d4', label:'http://9000' },
+  { id:'saasui',    name:'SaaS Dashboard',      url:'http://localhost:9090', icon:'📊', color:'#10b981', label:'http://9090' },
+];
+
+const DASHBOARD_URL = 'http://localhost:9090';
+const REDIRECT_DELAY = 3;   // saniye
+const POLL_INTERVAL  = 1200; // ms
+
+const state = {};
+SERVICES.forEach(s => state[s.id] = 'idle'); // idle | spin | ok | fail
+
+// ── DOM build ──────────────────────────────────────────────────────────────
+const container = document.getElementById('services');
+SERVICES.forEach(svc => {
+  const row = document.createElement('div');
+  row.className = 'svc-row';
+  row.id = 'row-' + svc.id;
+  row.innerHTML = `
+    <div class="svc-icon" style="background:${svc.color}20;color:${svc.color}">${svc.icon}</div>
+    <div class="svc-info">
+      <div class="svc-name">${svc.name}</div>
+      <div class="svc-url">${svc.label}</div>
+    </div>
+    <span class="svc-badge badge-idle" id="badge-${svc.id}">Bekleniyor</span>
+  `;
+  container.appendChild(row);
+});
+
+// ── Update UI ──────────────────────────────────────────────────────────────
+function setStatus(id, status) {
+  if (state[id] === status) return;
+  state[id] = status;
+
+  const row   = document.getElementById('row-' + id);
+  const badge = document.getElementById('badge-' + id);
+
+  row.className = 'svc-row';
+  badge.className = 'svc-badge';
+
+  if (status === 'spin') {
+    row.classList.add('waiting');
+    badge.classList.add('badge-spin');
+    badge.innerHTML = '<span class="spin">⟳</span> Başlıyor';
+  } else if (status === 'ok') {
+    row.classList.add('ready');
+    badge.classList.add('badge-ok');
+    badge.textContent = '✓ Hazır';
+  } else if (status === 'fail') {
+    row.classList.add('error');
+    badge.classList.add('badge-fail');
+    badge.textContent = '✗ Hata';
+  } else {
+    badge.classList.add('badge-idle');
+    badge.textContent = 'Bekleniyor';
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const okCount  = SERVICES.filter(s => state[s.id] === 'ok').length;
+  const pct      = Math.round((okCount / SERVICES.length) * 100);
+  document.getElementById('fill').style.width = pct + '%';
+  document.getElementById('pct').textContent  = pct + '%';
+
+  const statusLine = document.getElementById('statusLine');
+  if (okCount === SERVICES.length) {
+    statusLine.textContent = '✅ Tüm servisler hazır!';
+    statusLine.classList.add('go');
+    startRedirect();
+  } else {
+    statusLine.textContent = `${okCount}/${SERVICES.length} servis hazır, lütfen bekleyin...`;
+    statusLine.classList.remove('go');
+  }
+}
+
+// ── Health check via fetch (mode:no-cors = always resolves if port is up) ──
+async function checkService(svc) {
+  if (state[svc.id] === 'ok') return; // already up
+  setStatus(svc.id, 'spin');
+  try {
+    // no-cors: can't read response, but if fetch resolves → port is alive
+    await fetch(svc.url, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(2000) });
+    setStatus(svc.id, 'ok');
+  } catch {
+    // still starting — leave as spin (will retry)
+  }
+}
+
+// ── Poll loop ──────────────────────────────────────────────────────────────
+let pollHandle;
+function startPolling() {
+  SERVICES.forEach(s => setStatus(s.id, 'spin'));
+  pollHandle = setInterval(() => {
+    const allOk = SERVICES.every(s => state[s.id] === 'ok');
+    if (allOk) { clearInterval(pollHandle); return; }
+    SERVICES.forEach(checkService);
+  }, POLL_INTERVAL);
+  // first check immediately
+  SERVICES.forEach(checkService);
+}
+
+// ── Redirect countdown ─────────────────────────────────────────────────────
+let redirectStarted = false;
+function startRedirect() {
+  if (redirectStarted) return;
+  redirectStarted = true;
+  clearInterval(pollHandle);
+
+  const box  = document.getElementById('redirectBox');
+  const num  = document.getElementById('countNum');
+  const btn  = document.getElementById('btnOpen');
+  box.classList.add('show');
+  btn.classList.add('show');
+
+  let count = REDIRECT_DELAY;
+  num.textContent = count;
+  const t = setInterval(() => {
+    count--;
+    num.textContent = count;
+    if (count <= 0) {
+      clearInterval(t);
+      openDash();
+    }
+  }, 1000);
+}
+
+function openDash() {
+  window.location.href = DASHBOARD_URL;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+// 1.5 sn bekle sonra polling baslat (servisler henüz ayaga kalkiyor olabilir)
+setTimeout(startPolling, 1500);
+</script>
+</body>
+</html>
