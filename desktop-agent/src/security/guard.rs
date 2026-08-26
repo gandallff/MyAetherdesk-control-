@@ -106,7 +106,24 @@ impl SecurityGuard {
     }
 
     async fn dispatch_telemetry(payload: &SecurityTelemetryPayload) {
-        let client = reqwest_like_dispatch(payload).await;
+        info!("[SecurityGuard] Dispatching threat telemetry alert to server: {:?}", payload);
+        let client = reqwest::Client::new();
+        let backend_url = std::env::var("SAAS_BACKEND_URL")
+            .unwrap_or_else(|_| "http://localhost:5000".to_string());
+        let url = format!("{}/api/security/telemetry", backend_url);
+
+        match client.post(&url).json(payload).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    info!("[SecurityGuard] Security telemetry registered successfully on SaaS backend.");
+                } else {
+                    warn!("[SecurityGuard] Backend returned error status for telemetry: {:?}", resp.status());
+                }
+            }
+            Err(e) => {
+                error!("[SecurityGuard] Failed to transmit security telemetry: {}", e);
+            }
+        }
     }
 
     pub fn stop(&self) {
@@ -114,6 +131,3 @@ impl SecurityGuard {
     }
 }
 
-async fn reqwest_like_dispatch(payload: &SecurityTelemetryPayload) {
-    info!("[SecurityGuard] Telemetry alert dispatched to System Admin: {:?}", payload);
-}

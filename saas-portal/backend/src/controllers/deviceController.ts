@@ -60,8 +60,38 @@ export class DeviceController {
     });
   }
 
+  public static downloadCustomAgent(req: any, res: Response) {
+    const fs = require('fs');
+    const path = require('path');
+    
+    const pathsToTry = [
+      path.join(process.cwd(), '../../desktop-agent/target/release/aetherdesk-agent.exe'),
+      path.join(process.cwd(), '../../desktop-agent/target/debug/aetherdesk-agent.exe'),
+      path.join(process.cwd(), '../../AetherDesk-Distribution-Package/Agent/aetherdesk-agent.exe')
+    ];
+
+    let filePath = '';
+    for (const p of pathsToTry) {
+      if (fs.existsSync(p)) {
+        filePath = p;
+        break;
+      }
+    }
+
+    if (filePath) {
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': 'attachment; filename="aetherdesk-agent.exe"'
+      });
+      fs.createReadStream(filePath).pipe(res);
+    } else {
+      res.status(404).send('AetherDesk Agent executable not found. Please compile the Rust agent first using "cargo build --release" in the desktop-agent folder.');
+    }
+  }
+
   public static listSessionLogs(req: AuthenticatedRequest, res: Response) {
     const logs = db.prepare('SELECT * FROM session_logs ORDER BY started_at DESC LIMIT 50').all();
     res.json({ logs });
   }
 }
+

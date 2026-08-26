@@ -69,7 +69,9 @@ app.get('/api/devices', authMiddleware, DeviceController.listDevices);
 app.post('/api/devices', authMiddleware, DeviceController.addDevice);
 app.delete('/api/devices/:id', authMiddleware, DeviceController.removeDevice);
 app.get('/api/devices/installer-token', authMiddleware, DeviceController.generateInstallerToken);
+app.get('/api/download/custom-agent', DeviceController.downloadCustomAgent);
 app.get('/api/admin/session-logs', authMiddleware, requireRole('ADMIN'), DeviceController.listSessionLogs);
+
 
 // --- System Admin Security & Threat Telemetry Routes ---
 app.get('/api/admin/security/alerts', authMiddleware, requireRole('ADMIN'), SecurityController.getAlerts);
