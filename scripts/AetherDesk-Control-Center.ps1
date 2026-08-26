@@ -254,8 +254,16 @@ $btnVercelLogin.FlatStyle = "Flat"
 $btnVercelLogin.Location  = New-Object System.Drawing.Point(30, 222)
 $btnVercelLogin.Size      = New-Object System.Drawing.Size(480, 36)
 $btnVercelLogin.Add_Click({
-    Write-Log "Vercel giris ekrani ayri bir CMD penceresinde aciliyor..."
-    Start-Process cmd -ArgumentList "/c cd /d `"$rootDir\saas-portal\frontend`" && npx vercel login"
+    Write-Log "Vercel giris ekrani arka planda baslatiliyor... Lutfen acilan tarayici sayfasinda giris yapin."
+    
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName               = "npx.cmd"
+    $psi.Arguments              = "--yes vercel login"
+    $psi.UseShellExecute        = $false
+    $psi.CreateNoWindow         = $true
+    $psi.WorkingDirectory       = "$rootDir\saas-portal\frontend"
+    
+    [void][System.Diagnostics.Process]::Start($psi)
 })
 $form.Controls.Add($btnVercelLogin)
 
