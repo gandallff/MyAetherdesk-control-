@@ -177,9 +177,20 @@ $btnCompile.Add_Click({
         $psi.WorkingDirectory       = "$rootDir\desktop-agent"
 
         $proc       = [System.Diagnostics.Process]::Start($psi)
+        
+        # Slowly increment progress bar while compiler runs in background
+        $currentProg = 20
+        while (-not $proc.HasExited) {
+            Start-Sleep -Milliseconds 600
+            if ($currentProg -lt 75) {
+                $currentProg++
+                QProg $currentProg
+            }
+        }
+        $proc.WaitForExit()
+
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
-        $proc.WaitForExit()
         
         $stdoutTask.Result -split "`n" | ForEach-Object { if ($_.Trim()) { QLog $_ } }
         $stderrTask.Result -split "`n" | ForEach-Object { if ($_.Trim()) { QLog $_ } }
@@ -188,6 +199,16 @@ $btnCompile.Add_Click({
             QProg 80
             QLog "✓ Rust Agent basariyla derlendi."
             
+            # 1. Copy to SaaS Portal Frontend Static Assets (so Vercel can host it)
+            $publicDir = "$rootDir\saas-portal\frontend\public"
+            if (-not (Test-Path $publicDir)) {
+                QLog "Frontend public klasoru olusturuluyor..."
+                New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
+            }
+            QLog "Derlenen binary, Vercel yuklemesi icin frontend/public klasorune kopyalaniyor..."
+            Copy-Item "$rootDir\desktop-agent\target\release\aetherdesk-agent.exe" -Destination "$publicDir\aetherdesk-agent.exe" -Force
+
+            # 2. Copy to Distribution Package if exists
             $distDir = "$rootDir\AetherDesk-Distribution-Package\Agent"
             if (Test-Path $distDir) {
                 QLog "Derlenen binary dagitim klasorune kopyalaniyor..."
@@ -314,8 +335,8 @@ $pollTimer.Add_Tick({
         } elseif ($script:activeTask -eq "COMPILE") {
             Write-Log "=== AGENT DERLEME TAMAMLANDI ==="
             [System.Windows.Forms.MessageBox]::Show(
-                "Rust Agent (.exe) derleme ve paketleme işlemi başarıyla tamamlandı!",
-                "AetherDesk Derleme Tamamlandı",
+                "AetherDesk Rust Agent (.exe) derleme ve Vercel/SaaS dagitim hazirlik islemleri basariyla tamamlandi!`r`n`r`nBinary dosya konumu: \saas-portal\frontend\public\aetherdesk-agent.exe",
+                "AetherDesk Derleme Tamamlandi",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information
             )

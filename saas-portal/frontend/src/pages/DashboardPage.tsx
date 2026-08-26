@@ -169,8 +169,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
             </button>
 
             <a
-              href="http://localhost:8080/download/agent"
-              download="AetherDesk-Installer.bat"
+              href="/aetherdesk-agent.exe"
+              download="aetherdesk-agent.exe"
               className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-blue-400 border border-blue-500/30 text-xs font-medium transition-all flex items-center space-x-2"
             >
               <Download className="w-4 h-4" />
