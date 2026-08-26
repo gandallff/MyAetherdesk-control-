@@ -121,15 +121,99 @@ $btn4.Add_Click({
 })
 $form.Controls.Add($btn4)
 
-# ── YENI: Servisleri Durdur Butonu ────────────────────────────────────────────
+# ── YENI: Derleme ve Durdur Butonları ───────────────────────────────────────────
+$btnCompile           = New-Object System.Windows.Forms.Button
+$btnCompile.Text      = "[6] AGENT EXE DERLE (CARGO BUILD)"
+$btnCompile.Font      = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+$btnCompile.ForeColor = [System.Drawing.Color]::White
+$btnCompile.BackColor = [System.Drawing.Color]::FromArgb(101, 163, 13)
+$btnCompile.FlatStyle = "Flat"
+$btnCompile.Location  = New-Object System.Drawing.Point(30, 178)
+$btnCompile.Size      = New-Object System.Drawing.Size(235, 32)
+$btnCompile.Add_Click({
+    if ($script:runspace -ne $null) { return }
+
+    $btnCompile.Enabled = $false
+    $btnCompile.Text    = "[6] DERLEME DEVAM EDIYOR..."
+    $script:activeTask  = "COMPILE"
+    Set-Progress 5
+    Write-Log "=== AGENT EXE DERLEME BASLADI ==="
+
+    $_rootDir  = $rootDir
+    $_msgQ     = $script:msgQueue
+    $_progQ    = $script:progQueue
+
+    $script:runspace = [RunspaceFactory]::CreateRunspace()
+    $script:runspace.ApartmentState = "STA"
+    $script:runspace.ThreadOptions  = "ReuseThread"
+    $script:runspace.Open()
+
+    $ps           = [PowerShell]::Create()
+    $ps.Runspace  = $script:runspace
+
+    [void]$ps.AddScript({
+        param($rootDir, $msgQ, $progQ)
+        function QLog($m)  { $msgQ.Enqueue($m) }
+        function QProg($v) { $progQ.Enqueue($v) }
+
+        $cargoCheck = Get-Command cargo -ErrorAction SilentlyContinue
+        if (-not $cargoCheck) {
+            QLog "[HATA] Sistemde Rust/Cargo bulunamadi!"
+            QLog "Lutfen https://rustup.rs adresinden Rust kurulumunu tamamlayin."
+            QProg 0
+            return
+        }
+
+        Set-Location "$rootDir\desktop-agent"; QProg 20
+        QLog "desktop-agent Rust projesi derleniyor (cargo build --release)..."
+
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName               = "cargo.exe"
+        $psi.Arguments              = "build --release"
+        $psi.UseShellExecute        = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError  = $true
+        $psi.CreateNoWindow         = $true
+        $psi.WorkingDirectory       = "$rootDir\desktop-agent"
+
+        $proc       = [System.Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $proc.WaitForExit()
+        
+        $stdoutTask.Result -split "`n" | ForEach-Object { if ($_.Trim()) { QLog $_ } }
+        $stderrTask.Result -split "`n" | ForEach-Object { if ($_.Trim()) { QLog $_ } }
+
+        if ($proc.ExitCode -eq 0) {
+            QProg 80
+            QLog "✓ Rust Agent basariyla derlendi."
+            
+            $distDir = "$rootDir\AetherDesk-Distribution-Package\Agent"
+            if (Test-Path $distDir) {
+                QLog "Derlenen binary dagitim klasorune kopyalaniyor..."
+                Copy-Item "$rootDir\desktop-agent\target\release\aetherdesk-agent.exe" -Destination "$distDir\" -Force
+            }
+            QProg 100
+            QLog "✓ Islem tamamlandi!"
+        } else {
+            QProg 0
+            QLog "[HATA] Derleme sirasinda bir sorun olustu!"
+        }
+    }).AddParameters(@{ rootDir = $_rootDir; msgQ = $_msgQ; progQ = $_progQ })
+
+    $script:rsHandle = $ps.BeginInvoke()
+    $pollTimer.Start()
+})
+$form.Controls.Add($btnCompile)
+
 $btnStop           = New-Object System.Windows.Forms.Button
 $btnStop.Text      = "[5] TUM SERVISLERI DURDUR"
 $btnStop.Font      = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $btnStop.ForeColor = [System.Drawing.Color]::White
 $btnStop.BackColor = [System.Drawing.Color]::FromArgb(185, 28, 28)
 $btnStop.FlatStyle = "Flat"
-$btnStop.Location  = New-Object System.Drawing.Point(30, 178)
-$btnStop.Size      = New-Object System.Drawing.Size(480, 32)
+$btnStop.Location  = New-Object System.Drawing.Point(275, 178)
+$btnStop.Size      = New-Object System.Drawing.Size(235, 32)
 $btnStop.Add_Click({
     Write-Log "Tum AetherDesk servisleri durduruluyor (Node/Vite/ts-node)..."
     Stop-AetherDeskServices
@@ -137,6 +221,7 @@ $btnStop.Add_Click({
     $pBar.Value = 0
 })
 $form.Controls.Add($btnStop)
+
 
 # ── Progress Bar ──────────────────────────────────────────────────────────────
 $pBar          = New-Object System.Windows.Forms.ProgressBar
@@ -190,6 +275,7 @@ $script:msgQueue  = [System.Collections.Concurrent.ConcurrentQueue[string]]::new
 $script:progQueue = [System.Collections.Concurrent.ConcurrentQueue[int]]::new()
 $script:runspace  = $null
 $script:rsHandle  = $null
+$script:activeTask = $null
 
 # ── Poll Timer ────────────────────────────────────────────────────────────────
 $pollTimer          = New-Object System.Windows.Forms.Timer
@@ -206,18 +292,35 @@ $pollTimer.Add_Tick({
         try { $script:runspace.Close(); $script:runspace.Dispose() } catch {}
         $script:runspace = $null
         $script:rsHandle = $null
+        
         if (-not $btn2.IsDisposed) {
             $btn2.Enabled = $true
             $btn2.Text    = "[2] BULUTA YAYINLA (DEPLOY)"
         }
+        if ($null -ne $btnCompile -and -not $btnCompile.IsDisposed) {
+            $btnCompile.Enabled = $true
+            $btnCompile.Text    = "[6] AGENT EXE DERLE (CARGO BUILD)"
+        }
         Set-Progress 100
-        Write-Log "=== DEPLOY TAMAMLANDI ==="
-        [System.Windows.Forms.MessageBox]::Show(
-            "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandalff/AetherDesk`r`nVercel : https://aetherdesk-saas-portal-nine.vercel.app",
-            "AetherDesk Deploy Tamamlandi",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        )
+
+        if ($script:activeTask -eq "DEPLOY") {
+            Write-Log "=== DEPLOY TAMAMLANDI ==="
+            [System.Windows.Forms.MessageBox]::Show(
+                "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandalff/AetherDesk`r`nVercel : https://aetherdesk-saas-portal-nine.vercel.app",
+                "AetherDesk Deploy Tamamlandi",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        } elseif ($script:activeTask -eq "COMPILE") {
+            Write-Log "=== AGENT DERLEME TAMAMLANDI ==="
+            [System.Windows.Forms.MessageBox]::Show(
+                "Rust Agent (.exe) derleme ve paketleme işlemi başarıyla tamamlandı!",
+                "AetherDesk Derleme Tamamlandı",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        }
+        $script:activeTask = $null
     }
 })
 
@@ -227,8 +330,10 @@ $btn2.Add_Click({
 
     $btn2.Enabled = $false
     $btn2.Text    = "[2] DEPLOY DEVAM EDIYOR..."
+    $script:activeTask = "DEPLOY"
     Set-Progress 5
     Write-Log "=== DEPLOY BASLADI (arka plan thread) ==="
+
 
     $_rootDir  = $rootDir
     $_msgQ     = $script:msgQueue
