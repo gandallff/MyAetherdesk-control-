@@ -34,7 +34,7 @@ function Stop-AetherDeskServices {
 # ── Form ──────────────────────────────────────────────────────────────────────
 $form = New-Object System.Windows.Forms.Form
 $form.Text            = "AetherDesk Control Center 2026"
-$form.Size            = New-Object System.Drawing.Size(560, 660)
+$form.Size            = New-Object System.Drawing.Size(560, 710)
 $form.StartPosition   = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox     = $false
@@ -244,9 +244,24 @@ $btnStop.Add_Click({
 $form.Controls.Add($btnStop)
 
 
+# ── YENI: Vercel Login Butonu ──────────────────────────────────────────────────
+$btnVercelLogin           = New-Object System.Windows.Forms.Button
+$btnVercelLogin.Text      = "[7] VERCEL HESABINA GIRIS YAP (LOGIN)"
+$btnVercelLogin.Font      = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$btnVercelLogin.ForeColor = [System.Drawing.Color]::White
+$btnVercelLogin.BackColor = [System.Drawing.Color]::FromArgb(79, 70, 229)
+$btnVercelLogin.FlatStyle = "Flat"
+$btnVercelLogin.Location  = New-Object System.Drawing.Point(30, 222)
+$btnVercelLogin.Size      = New-Object System.Drawing.Size(480, 36)
+$btnVercelLogin.Add_Click({
+    Write-Log "Vercel giris ekrani ayri bir CMD penceresinde aciliyor..."
+    Start-Process cmd -ArgumentList "/c cd /d `"$rootDir\saas-portal\frontend`" && npx vercel login"
+})
+$form.Controls.Add($btnVercelLogin)
+
 # ── Progress Bar ──────────────────────────────────────────────────────────────
 $pBar          = New-Object System.Windows.Forms.ProgressBar
-$pBar.Location = New-Object System.Drawing.Point(30, 218)
+$pBar.Location = New-Object System.Drawing.Point(30, 272)
 $pBar.Size     = New-Object System.Drawing.Size(480, 16)
 $pBar.Value    = 0
 $form.Controls.Add($pBar)
@@ -259,8 +274,8 @@ $txtLog.ReadOnly   = $true
 $txtLog.Font       = New-Object System.Drawing.Font("Consolas", 8.5)
 $txtLog.BackColor  = [System.Drawing.Color]::FromArgb(9, 13, 22)
 $txtLog.ForeColor  = [System.Drawing.Color]::FromArgb(52, 211, 153)
-$txtLog.Location   = New-Object System.Drawing.Point(30, 242)
-$txtLog.Size       = New-Object System.Drawing.Size(480, 280)
+$txtLog.Location   = New-Object System.Drawing.Point(30, 296)
+$txtLog.Size       = New-Object System.Drawing.Size(480, 260)
 $txtLog.Text       = "[INFO] AetherDesk Control Center Hazir.`r`nCanli GitHub  : https://github.com/gandalff/AetherDesk`r`nCanli Vercel  : https://aetherdesk-saas-portal-nine.vercel.app`r`n"
 $form.Controls.Add($txtLog)
 
@@ -271,12 +286,13 @@ $btnOpenGit.Font      = New-Object System.Drawing.Font("Segoe UI", 8, [System.Dr
 $btnOpenGit.ForeColor = [System.Drawing.Color]::FromArgb(96, 165, 250)
 $btnOpenGit.BackColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
 $btnOpenGit.FlatStyle = "Flat"
-$btnOpenGit.Location  = New-Object System.Drawing.Point(30, 530)
+$btnOpenGit.Location  = New-Object System.Drawing.Point(30, 570)
 $btnOpenGit.Size      = New-Object System.Drawing.Size(480, 32)
 $btnOpenGit.Add_Click({
     [System.Diagnostics.Process]::Start("https://github.com/gandalff/AetherDesk")
 })
 $form.Controls.Add($btnOpenGit)
+
 
 # ── Yardimci Fonksiyonlar ─────────────────────────────────────────────────────
 function Write-Log($msg) {
