@@ -16,6 +16,10 @@
       "dest": "/assets/$1"
     },
     {
+      "src": "/aetherdesk-agent.exe",
+      "dest": "/aetherdesk-agent.exe"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
