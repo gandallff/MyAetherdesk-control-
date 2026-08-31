@@ -9,7 +9,7 @@ Bu doküman, **AetherDesk Remote Control & Commercial SaaS Platform** mimarisini
 ```
                                  ┌─────────────────────────────────────────┐
                                  │     🌐 FRONTEND SİTESİ (VERCEL)         │
-                                 │   https://aetherdesk-control.           │
+                                 │   https://my-aetherdesk-control.        │
                                  │              vercel.app                 │
                                  └────────────────────┬────────────────────┘
                                                       │

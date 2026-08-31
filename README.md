@@ -8,7 +8,7 @@ AetherDesk, yüksek performanslı **Rust tabanlı DXGI GPU ekran yakalama**, ult
 
 | Bileşen | Canlı Adres / Bağlantı | Durum |
 | :--- | :--- | :--- |
-| 🚀 **Vercel Canlı SaaS Portalı** | **[https://aetherdesk-control.vercel.app](https://aetherdesk-control.vercel.app)** | 🟢 7/24 YAYINDA |
+| 🚀 **Vercel Canlı SaaS Portalı** | **[https://my-aetherdesk-control.vercel.app](https://my-aetherdesk-control.vercel.app)** | 🟢 7/24 YAYINDA |
 | 🐙 **GitHub Resmi Deposu** | **[https://github.com/gandallff/MyAetherdesk-control-](https://github.com/gandallff/MyAetherdesk-control-)** | 🟢 CANLI |
 | 🎛️ **Master Yönetim Merkezi** | **[AetherDesk-Control-Center.bat](file:///c:/Users/QALab/Desktop/App_DataControl/AetherDesk_RemoteControl/AetherDesk-Control-Center.bat)** | 🟢 MASAÜSTÜ GUI |
 
