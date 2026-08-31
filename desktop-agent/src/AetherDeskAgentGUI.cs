@@ -1,9 +1,12 @@
 using System;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace AetherDesk.Agent
@@ -21,6 +24,21 @@ namespace AetherDesk.Agent
 
     public class AgentMainForm : Form
     {
+        // Win32 APIs for Real Mouse & Keyboard Input Emulation
+        [DllImport("user32.dll")]
+        static extern bool SetCursorPos(int X, int Y);
+
+        [DllImport("user32.dll")]
+        static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+
+        [DllImport("user32.dll")]
+        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+
+        private const uint MOUSEEVENTF_LEFTDOWN = 0x02;
+        private const uint MOUSEEVENTF_LEFTUP = 0x04;
+        private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
+        private const uint MOUSEEVENTF_RIGHTUP = 0x09;
+
         private Label lblTitle;
         private Label lblSub;
         private Panel panelCard;
@@ -31,18 +49,17 @@ namespace AetherDesk.Agent
         private Label lblStatus;
         private Panel statusDot;
 
-        // Settings Controls
         private GroupBox grpAccessSettings;
         private RadioButton rbUnattended;
         private RadioButton rbPassword;
         private RadioButton rbPrompt;
         private TextBox txtCustomPassword;
-        private Label lblPassNote;
         private Button btnSaveSettings;
 
         private string mySessionId;
         private HttpListener listener;
         private Thread listenThread;
+        private bool isStreaming = false;
 
         public AgentMainForm()
         {
@@ -56,32 +73,30 @@ namespace AetherDesk.Agent
             this.BackColor = Color.FromArgb(10, 15, 29);
             this.ForeColor = Color.FromArgb(226, 232, 240);
 
-            // Title
+            // Header
             lblTitle = new Label();
-            lblTitle.Text = "⚡ AetherDesk QuickSupport";
-            lblTitle.Font = new Font("Segoe UI", 16, FontStyle.Bold);
+            lblTitle.Text = "⚡ AetherDesk QuickSupport (Gercek Ekran)";
+            lblTitle.Font = new Font("Segoe UI", 15, FontStyle.Bold);
             lblTitle.ForeColor = Color.FromArgb(96, 165, 250);
             lblTitle.Location = new Point(30, 20);
-            lblTitle.Size = new Size(440, 32);
+            lblTitle.Size = new Size(440, 30);
             this.Controls.Add(lblTitle);
 
-            // Subtitle
             lblSub = new Label();
-            lblSub.Text = "Bilgisayariniz uzaktan erisime ve guvenli baglantiya hazir.";
+            lblSub.Text = "Gercek fiziksel ekran yakalama ve tam uzaktan kontrol aktif.";
             lblSub.Font = new Font("Segoe UI", 9);
             lblSub.ForeColor = Color.FromArgb(148, 163, 184);
             lblSub.Location = new Point(30, 52);
             lblSub.Size = new Size(440, 20);
             this.Controls.Add(lblSub);
 
-            // Card Panel (ID & Status)
+            // Card Panel
             panelCard = new Panel();
             panelCard.Location = new Point(30, 80);
             panelCard.Size = new Size(444, 150);
             panelCard.BackColor = Color.FromArgb(20, 29, 47);
             this.Controls.Add(panelCard);
 
-            // Status Indicator
             statusDot = new Panel();
             statusDot.Location = new Point(20, 16);
             statusDot.Size = new Size(12, 12);
@@ -89,23 +104,21 @@ namespace AetherDesk.Agent
             panelCard.Controls.Add(statusDot);
 
             lblStatus = new Label();
-            lblStatus.Text = "BAGLANTIYA HAZIR (ONLINE)";
+            lblStatus.Text = "GERCEK EKRAN YAYINI HAZIR (ONLINE)";
             lblStatus.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
             lblStatus.Location = new Point(38, 14);
-            lblStatus.Size = new Size(200, 18);
+            lblStatus.Size = new Size(250, 18);
             panelCard.Controls.Add(lblStatus);
 
-            // Session ID Tag
             lblIdTag = new Label();
-            lblIdTag.Text = "BU BILGISAYARIN OZEL OTURUM ID'SI:";
+            lblIdTag.Text = "BU BILGISAYARIN OTURUM ID'SI:";
             lblIdTag.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblIdTag.ForeColor = Color.FromArgb(148, 163, 184);
             lblIdTag.Location = new Point(20, 42);
             lblIdTag.Size = new Size(380, 16);
             panelCard.Controls.Add(lblIdTag);
 
-            // Large 9-Digit Session ID
             lblSessionId = new Label();
             lblSessionId.Text = this.mySessionId;
             lblSessionId.Font = new Font("Consolas", 24, FontStyle.Bold);
@@ -114,7 +127,6 @@ namespace AetherDesk.Agent
             lblSessionId.Size = new Size(270, 44);
             panelCard.Controls.Add(lblSessionId);
 
-            // Copy ID Button
             btnCopy = new Button();
             btnCopy.Text = "ID'yi Kopyala";
             btnCopy.Font = new Font("Segoe UI", 9, FontStyle.Bold);
@@ -131,7 +143,6 @@ namespace AetherDesk.Agent
             };
             panelCard.Controls.Add(btnCopy);
 
-            // Local IP Address Detection
             string localIp = GetLocalIp();
             lblIpInfo = new Label();
             lblIpInfo.Text = "Yerel IP (LAN): " + localIp + ":8443";
@@ -141,7 +152,7 @@ namespace AetherDesk.Agent
             lblIpInfo.Size = new Size(380, 20);
             panelCard.Controls.Add(lblIpInfo);
 
-            // GroupBox: Access & Security Settings
+            // GroupBox: Access Settings
             grpAccessSettings = new GroupBox();
             grpAccessSettings.Text = " 🔒 Erisim ve Guvenlik Ayarlari ";
             grpAccessSettings.Font = new Font("Segoe UI", 9, FontStyle.Bold);
@@ -150,27 +161,22 @@ namespace AetherDesk.Agent
             grpAccessSettings.Size = new Size(444, 210);
             this.Controls.Add(grpAccessSettings);
 
-            // Option 1: Unattended (Passwordless / Auto-Accept)
             rbUnattended = new RadioButton();
             rbUnattended.Text = "Katilimsiz Erisim (Sifresiz Otomatik Baglanti)";
             rbUnattended.Font = new Font("Segoe UI", 8.5f);
             rbUnattended.ForeColor = Color.FromArgb(226, 232, 240);
             rbUnattended.Location = new Point(20, 28);
             rbUnattended.Size = new Size(400, 22);
-            rbUnattended.CheckedChanged += (s, e) => UpdateAccessModeUI();
             grpAccessSettings.Controls.Add(rbUnattended);
 
-            // Option 2: Password Protected
             rbPassword = new RadioButton();
             rbPassword.Text = "Ozel Sifreli Erisim (Baglanan kisiye sifre sorulsun)";
             rbPassword.Font = new Font("Segoe UI", 8.5f);
             rbPassword.ForeColor = Color.FromArgb(226, 232, 240);
             rbPassword.Location = new Point(20, 56);
             rbPassword.Size = new Size(400, 22);
-            rbPassword.CheckedChanged += (s, e) => UpdateAccessModeUI();
             grpAccessSettings.Controls.Add(rbPassword);
 
-            // Custom Password Box
             txtCustomPassword = new TextBox();
             txtCustomPassword.Font = new Font("Consolas", 10);
             txtCustomPassword.BackColor = Color.FromArgb(15, 23, 42);
@@ -179,25 +185,14 @@ namespace AetherDesk.Agent
             txtCustomPassword.Size = new Size(180, 25);
             grpAccessSettings.Controls.Add(txtCustomPassword);
 
-            lblPassNote = new Label();
-            lblPassNote.Text = "(Baglanti icin gereken sifreyi belirleyin)";
-            lblPassNote.Font = new Font("Segoe UI", 8);
-            lblPassNote.ForeColor = Color.FromArgb(148, 163, 184);
-            lblPassNote.Location = new Point(230, 87);
-            lblPassNote.Size = new Size(200, 20);
-            grpAccessSettings.Controls.Add(lblPassNote);
-
-            // Option 3: Manual Confirmation Popup
             rbPrompt = new RadioButton();
             rbPrompt.Text = "Her Baglantida Ekranda Onay Iste (Manuel Kabul)";
             rbPrompt.Font = new Font("Segoe UI", 8.5f);
             rbPrompt.ForeColor = Color.FromArgb(226, 232, 240);
             rbPrompt.Location = new Point(20, 118);
             rbPrompt.Size = new Size(400, 22);
-            rbPrompt.CheckedChanged += (s, e) => UpdateAccessModeUI();
             grpAccessSettings.Controls.Add(rbPrompt);
 
-            // Save Settings Button
             btnSaveSettings = new Button();
             btnSaveSettings.Text = "Ayarlari Kaydet";
             btnSaveSettings.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
@@ -210,29 +205,16 @@ namespace AetherDesk.Agent
             btnSaveSettings.Click += (s, e) => SaveAccessSettings();
             grpAccessSettings.Controls.Add(btnSaveSettings);
 
-            // Bottom Instructions
             Label lblFooter = new Label();
-            lblFooter.Text = "Oturum numarasini yoneticiye iletiniz. Baglanti guvenlik ayarlariniza gore saglanacaktir.";
+            lblFooter.Text = "Bu program calistigi surece portaldan tek tikla bu bilgisayarin gercek masaustu kontrol edilebilir.";
             lblFooter.Font = new Font("Segoe UI", 8.5f);
             lblFooter.ForeColor = Color.FromArgb(100, 116, 139);
             lblFooter.Location = new Point(30, 465);
             lblFooter.Size = new Size(440, 40);
             this.Controls.Add(lblFooter);
 
-            // Load Saved Settings from Registry
             LoadSavedAccessSettings();
-
-            // Start Listener
             StartListener();
-        }
-
-        private void UpdateAccessModeUI()
-        {
-            txtCustomPassword.Enabled = rbPassword.Checked;
-            if (rbPassword.Checked && string.IsNullOrEmpty(txtCustomPassword.Text))
-            {
-                txtCustomPassword.Text = "aether2026";
-            }
         }
 
         private void LoadSavedAccessSettings()
@@ -244,52 +226,28 @@ namespace AetherDesk.Agent
                     string mode = (key.GetValue("AccessMode") ?? "UNATTENDED").ToString();
                     string pass = (key.GetValue("AccessPassword") ?? "aether2026").ToString();
                     txtCustomPassword.Text = pass;
-
-                    if (mode == "PASSWORD")
-                        rbPassword.Checked = true;
-                    else if (mode == "PROMPT")
-                        rbPrompt.Checked = true;
-                    else
-                        rbUnattended.Checked = true;
+                    if (mode == "PASSWORD") rbPassword.Checked = true;
+                    else if (mode == "PROMPT") rbPrompt.Checked = true;
+                    else rbUnattended.Checked = true;
                 }
             }
-            catch
-            {
-                rbUnattended.Checked = true;
-                txtCustomPassword.Text = "aether2026";
-            }
-            UpdateAccessModeUI();
+            catch { rbUnattended.Checked = true; }
         }
 
         private void SaveAccessSettings()
         {
             try
             {
-                string mode = "UNATTENDED";
-                if (rbPassword.Checked) mode = "PASSWORD";
-                else if (rbPrompt.Checked) mode = "PROMPT";
-
+                string mode = rbPassword.Checked ? "PASSWORD" : (rbPrompt.Checked ? "PROMPT" : "UNATTENDED");
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
                 {
                     key.SetValue("AccessMode", mode);
                     key.SetValue("AccessPassword", txtCustomPassword.Text.Trim());
                 }
-
-                btnSaveSettings.Text = "✓ Ayarlar Basariyla Kaydedildi!";
+                btnSaveSettings.Text = "✓ Kaydedildi!";
                 btnSaveSettings.BackColor = Color.FromArgb(5, 150, 105);
-                System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
-                t.Interval = 2500;
-                t.Tick += (s, e) => {
-                    btnSaveSettings.Text = "Ayarlari Kaydet";
-                    btnSaveSettings.BackColor = Color.FromArgb(16, 185, 129);
-                    t.Stop();
-                };
-                t.Start();
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Ayar kaydedilemedi: " + ex.Message);
-            }
+            catch { }
         }
 
         private string GetOrCreateUniqueSessionId()
@@ -299,10 +257,7 @@ namespace AetherDesk.Agent
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
                 {
                     object val = key.GetValue("SessionId");
-                    if (val != null && !string.IsNullOrEmpty(val.ToString()))
-                    {
-                        return val.ToString();
-                    }
+                    if (val != null && !string.IsNullOrEmpty(val.ToString())) return val.ToString();
                     Random rnd = new Random();
                     string newId = string.Format("{0:D3} {1:D3} {2:D3}", rnd.Next(100, 999), rnd.Next(100, 999), rnd.Next(100, 999));
                     key.SetValue("SessionId", newId);
@@ -337,19 +292,131 @@ namespace AetherDesk.Agent
                 try
                 {
                     HttpListenerContext ctx = listener.GetContext();
-                    this.Invoke((MethodInvoker)delegate {
-                        statusDot.BackColor = Color.FromArgb(96, 165, 250);
-                        lblStatus.Text = "UZAKTAN BAGLANTI AKTIF";
-                        lblStatus.ForeColor = Color.FromArgb(96, 165, 250);
-                    });
-
-                    byte[] buf = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"connected\",\"session\":\"" + this.mySessionId + "\"}");
-                    ctx.Response.ContentType = "application/json";
-                    ctx.Response.OutputStream.Write(buf, 0, buf.Length);
-                    ctx.Response.Close();
+                    ThreadPool.QueueUserWorkItem((state) => HandleRequest(ctx));
                 }
                 catch { }
             }
+        }
+
+        private void HandleRequest(HttpListenerContext ctx)
+        {
+            try
+            {
+                // Enable CORS
+                ctx.Response.AddHeader("Access-Control-Allow-Origin", "*");
+                ctx.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                ctx.Response.AddHeader("Access-Control-Allow-Headers", "*");
+
+                if (ctx.Request.HttpMethod == "OPTIONS")
+                {
+                    ctx.Response.StatusCode = 200;
+                    ctx.Response.Close();
+                    return;
+                }
+
+                string path = ctx.Request.Url.AbsolutePath.ToLower();
+
+                // 1. Live Screen MJPEG / JPEG Stream
+                if (path == "/screen" || path == "/screenshot")
+                {
+                    byte[] jpegBytes = CaptureRealScreenJpeg();
+                    ctx.Response.ContentType = "image/jpeg";
+                    ctx.Response.ContentLength64 = jpegBytes.Length;
+                    ctx.Response.OutputStream.Write(jpegBytes, 0, jpegBytes.Length);
+                    ctx.Response.Close();
+
+                    this.Invoke((MethodInvoker)delegate {
+                        statusDot.BackColor = Color.FromArgb(96, 165, 250);
+                        lblStatus.Text = "GERCEK EKRAN YAYINI AKTIF";
+                        lblStatus.ForeColor = Color.FromArgb(96, 165, 250);
+                    });
+                    return;
+                }
+
+                // 2. Real Mouse Control (Clicks & Movements)
+                if (path == "/mouse")
+                {
+                    string xStr = ctx.Request.QueryString["x"];
+                    string yStr = ctx.Request.QueryString["y"];
+                    string act = ctx.Request.QueryString["action"] ?? "move";
+
+                    if (!string.IsNullOrEmpty(xStr) && !string.IsNullOrEmpty(yStr))
+                    {
+                        int targetX = int.Parse(xStr);
+                        int targetY = int.Parse(yStr);
+
+                        // Scale from browser coordinates to physical screen resolution
+                        Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+                        int screenW = int.Parse(ctx.Request.QueryString["sw"] ?? screenBounds.Width.ToString());
+                        int screenH = int.Parse(ctx.Request.QueryString["sh"] ?? screenBounds.Height.ToString());
+
+                        int realX = (int)((double)targetX / screenW * screenBounds.Width);
+                        int realY = (int)((double)targetY / screenH * screenBounds.Height);
+
+                        SetCursorPos(realX, realY);
+
+                        if (act == "click")
+                        {
+                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                        }
+                        else if (act == "rightclick")
+                        {
+                            mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, (uint)realX, (uint)realY, 0, 0);
+                        }
+                    }
+
+                    byte[] okBuf = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    ctx.Response.ContentType = "application/json";
+                    ctx.Response.OutputStream.Write(okBuf, 0, okBuf.Length);
+                    ctx.Response.Close();
+                    return;
+                }
+
+                // 3. Handshake Status Endpoint
+                byte[] buf = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"connected\",\"session\":\"" + this.mySessionId + "\",\"width\":" + Screen.PrimaryScreen.Bounds.Width + ",\"height\":" + Screen.PrimaryScreen.Bounds.Height + "}");
+                ctx.Response.ContentType = "application/json";
+                ctx.Response.OutputStream.Write(buf, 0, buf.Length);
+                ctx.Response.Close();
+            }
+            catch { }
+        }
+
+        // Real Windows Physical Desktop Screen Capture
+        private byte[] CaptureRealScreenJpeg()
+        {
+            Rectangle bounds = Screen.PrimaryScreen.Bounds;
+            using (Bitmap bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb))
+            {
+                using (Graphics g = Graphics.FromImage(bitmap))
+                {
+                    // Copy real screen pixels from GPU / Display buffer
+                    g.CopyFromScreen(0, 0, 0, 0, bounds.Size, CopyPixelOperation.SourceCopy);
+                    
+                    // Draw mouse cursor on real position
+                    Point cursorPoint = Cursor.Position;
+                    Cursors.Default.Draw(g, new Rectangle(cursorPoint.X, cursorPoint.Y, 32, 32));
+                }
+
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    ImageCodecInfo jpgEncoder = GetEncoder(ImageFormat.Jpeg);
+                    EncoderParameters myEncoderParameters = new EncoderParameters(1);
+                    // Fast JPEG compression for low latency
+                    myEncoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 65L);
+                    bitmap.Save(ms, jpgEncoder, myEncoderParameters);
+                    return ms.ToArray();
+                }
+            }
+        }
+
+        private ImageCodecInfo GetEncoder(ImageFormat format)
+        {
+            ImageCodecInfo[] codecs = ImageCodecInfo.GetImageDecoders();
+            foreach (ImageCodecInfo codec in codecs)
+            {
+                if (codec.FormatID == format.Guid) return codec;
+            }
+            return null;
         }
 
         private string GetLocalIp()
