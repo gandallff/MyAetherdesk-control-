@@ -86,15 +86,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             <span>{t.downloadFreeAgent}</span>
           </a>
 
-          <a
-            href="http://localhost:9000"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto px-8 py-4 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/80 text-slate-200 font-semibold rounded-2xl transition-all flex items-center justify-center space-x-2 text-sm backdrop-blur-xl"
+          <button
+            onClick={onOpenAuth}
+            className="w-full sm:w-auto px-8 py-4 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/80 text-slate-200 font-semibold rounded-2xl transition-all flex items-center justify-center space-x-2 text-sm backdrop-blur-xl cursor-pointer"
           >
             <span>{t.launchDashboard}</span>
             <ExternalLink className="w-4 h-4 text-blue-400" />
-          </a>
+          </button>
         </div>
 
         {/* Live Mockup Viewport Banner */}
