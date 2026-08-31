@@ -284,7 +284,7 @@ $txtLog.BackColor  = [System.Drawing.Color]::FromArgb(9, 13, 22)
 $txtLog.ForeColor  = [System.Drawing.Color]::FromArgb(52, 211, 153)
 $txtLog.Location   = New-Object System.Drawing.Point(30, 296)
 $txtLog.Size       = New-Object System.Drawing.Size(480, 260)
-$txtLog.Text       = "[INFO] AetherDesk Control Center Hazir.`r`nCanli GitHub  : https://github.com/gandalff/AetherDesk`r`nCanli Vercel  : https://aetherdesk-control.vercel.app`r`n"
+$txtLog.Text       = "[INFO] AetherDesk Control Center Hazir.`r`nCanli GitHub  : https://github.com/gandallff/MyAetherdesk-control-`r`nCanli Vercel  : https://aetherdesk-control.vercel.app`r`n"
 $form.Controls.Add($txtLog)
 
 # ── GitHub Butonu ─────────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ $btnOpenGit.FlatStyle = "Flat"
 $btnOpenGit.Location  = New-Object System.Drawing.Point(30, 570)
 $btnOpenGit.Size      = New-Object System.Drawing.Size(480, 32)
 $btnOpenGit.Add_Click({
-    [System.Diagnostics.Process]::Start("https://github.com/gandalff/AetherDesk")
+    [System.Diagnostics.Process]::Start("https://github.com/gandallff/MyAetherdesk-control-")
 })
 $form.Controls.Add($btnOpenGit)
 
@@ -351,7 +351,7 @@ $pollTimer.Add_Tick({
         if ($script:activeTask -eq "DEPLOY") {
             Write-Log "=== DEPLOY TAMAMLANDI ==="
             [System.Windows.Forms.MessageBox]::Show(
-                "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandalff/AetherDesk`r`nVercel : https://aetherdesk-control.vercel.app",
+                "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandallff/MyAetherdesk-control-`r`nVercel : https://aetherdesk-control.vercel.app",
                 "AetherDesk Deploy Tamamlandi",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information
@@ -402,7 +402,7 @@ $btn2.Add_Click({
         if (!(Test-Path "$rootDir\.git")) {
             QLog "Git deposu ilklendiriliyor..."
             git init; git branch -M main
-            git remote add origin https://github.com/gandalff/AetherDesk.git
+            git remote add origin https://github.com/gandallff/MyAetherdesk-control-.git
         }
         QProg 20
 

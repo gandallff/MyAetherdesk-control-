@@ -9,14 +9,14 @@ Bu kılavuz, **AetherDesk** projesinin teknik kurulumunu, çalıştırma adımla
 Proje kök dizinindeki **[AetherDesk-Control-Center.bat](file:///c:/Users/QALab/Desktop/App_DataControl/AetherDesk_RemoteControl/AetherDesk-Control-Center.bat)** dosyasına çift tıklayarak Yönetim Merkezini başlatın:
 
 1. **`[1] TUM SERVISLERI BASLAT`**: 5 arka plan servisini (Sinyalleşme: 8080, SaaS API: 5000, Web Viewer: 9000, SaaS Frontend: 9090 ve Cloudflare Tüneli) çalıştırır.
-2. **`[2] BULUTA YAYINLA (DEPLOY)`**: Önce GitHub (`gandalff/AetherDesk`) reposuna yükleme yapar, ardından Vercel (`https://aetherdesk-control.vercel.app`) adresine yayınlar.
+2. **`[2] BULUTA YAYINLA (DEPLOY)`**: Önce GitHub (`gandallff/MyAetherdesk-control-`) reposuna yükleme yapar, ardından Vercel (`https://aetherdesk-control.vercel.app`) adresine yayınlar.
 
 ---
 
 ## 🌐 2. Bulut Yayınlama & Git Kuralları
 
 - **`.gitignore` Yapılandırması**: `node_modules/`, `dist/`, `target/`, `.vercel/` ve `.db` dosyaları Git takibinden çıkarılmıştır.
-- **GitHub Deposu**: **[https://github.com/gandalff/AetherDesk](https://github.com/gandalff/AetherDesk)**
+- **GitHub Deposu**: **[https://github.com/gandallff/MyAetherdesk-control-](https://github.com/gandallff/MyAetherdesk-control-)**
 - **Vercel Canlı Adresi**: **[https://aetherdesk-control.vercel.app](https://aetherdesk-control.vercel.app)**
 
 ---

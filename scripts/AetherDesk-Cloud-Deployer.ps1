@@ -24,7 +24,7 @@ $form.Controls.Add($lblTitle)
 
 # Subtitle
 $lblSub = New-Object System.Windows.Forms.Label
-$lblSub.Text = "Tek tikla once GitHub (gandalff/AetherDesk) reposunu, ardindan Vercel'i guncelleyin."
+$lblSub.Text = "Tek tikla once GitHub (gandallff/MyAetherdesk-control-) reposunu, ardindan Vercel'i guncelleyin."
 $lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $lblSub.ForeColor = [System.Drawing.Color]::FromArgb(148, 163, 184)
 $lblSub.Location = New-Object System.Drawing.Point(30, 50)
@@ -41,7 +41,7 @@ $txtLog.BackColor = [System.Drawing.Color]::FromArgb(9, 13, 22)
 $txtLog.ForeColor = [System.Drawing.Color]::FromArgb(52, 211, 153)
 $txtLog.Location = New-Object System.Drawing.Point(30, 80)
 $txtLog.Size = New-Object System.Drawing.Size(480, 220)
-$txtLog.Text = "[INFO] AetherDesk Cloud Deployer Hazir.`r`nCanli GitHub: https://github.com/gandalff/AetherDesk`r`nCanli Vercel: https://aetherdesk-control.vercel.app`r`n"
+$txtLog.Text = "[INFO] AetherDesk Cloud Deployer Hazir.`r`nCanli GitHub: https://github.com/gandallff/MyAetherdesk-control-`r`nCanli Vercel: https://aetherdesk-control.vercel.app`r`n"
 $form.Controls.Add($txtLog)
 
 function Write-Log($msg) {
@@ -69,7 +69,7 @@ $btnGit.Add_Click({
         Write-Log "Git deposu ilklendiriliyor..."
         git init | Out-Null
         git branch -M main | Out-Null
-        git remote add origin https://github.com/gandalff/AetherDesk.git | Out-Null
+        git remote add origin https://github.com/gandallff/MyAetherdesk-control-.git | Out-Null
     }
 
     Write-Log "Degisiklikler taraniyor (node_modules ve gecici dosyalar haric)..."
@@ -121,7 +121,7 @@ $btnAll.Add_Click({
     $btnAll.Enabled = $false
     
     # Step 1: GitHub
-    Write-Log "=== 1/2: ONCE GITHUB (gandalff/AetherDesk) GUNCELLENIYOR ==="
+    Write-Log "=== 1/2: ONCE GITHUB (gandallff/MyAetherdesk-control-) GUNCELLENIYOR ==="
     Set-Location "$rootDir"
     git add .
     git commit -m "Auto Release: GitHub & Vercel Sequential Update" 2>&1 | Out-Null
@@ -155,7 +155,7 @@ $btnOpenGit.FlatStyle = "Flat"
 $btnOpenGit.Location = New-Object System.Drawing.Point(30, 462)
 $btnOpenGit.Size = New-Object System.Drawing.Size(480, 30)
 $btnOpenGit.Add_Click({
-    [System.Diagnostics.Process]::Start("https://github.com/gandalff/AetherDesk")
+    [System.Diagnostics.Process]::Start("https://github.com/gandallff/MyAetherdesk-control-")
 })
 $form.Controls.Add($btnOpenGit)
 

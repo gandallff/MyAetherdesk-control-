@@ -39,9 +39,9 @@ echo.
 :: ── ADIM 2: Servisler ayaga kalksın diye bekle ──────────────────────────────
 timeout /t 6 /nobreak >nul
 
-:: ── ADIM 3: Loading sayfasini tarayicida ac ─────────────────────────────────
-echo [*] Tarayici aciliyor (yukleme ekrani)...
-start "" "%~dp0aetherdesk-loading.html"
+:: ── ADIM 3: SaaS Dashboard'u tarayicida ac ──────────────────────────────
+echo [*] Tarayici aciliyor (SaaS Dashboard :9090)...
+start "" "http://localhost:9090"
 
 echo.
 echo   Dashboard hazir olunca sayfa otomatik acilacak.
