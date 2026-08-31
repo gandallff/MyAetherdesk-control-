@@ -48,8 +48,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
           </button>
 
           <a
-            href="/aetherdesk-agent.exe"
-            download="aetherdesk-agent.exe"
+            href="/AetherDesk-QuickSupport.zip"
+            download="AetherDesk-QuickSupport.zip"
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-blue-500/25 flex items-center space-x-2 border border-blue-400/20"
           >
             <Download className="w-4 h-4" />
@@ -78,8 +78,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
           <a
-            href="/aetherdesk-agent.exe"
-            download="aetherdesk-agent.exe"
+            href="/AetherDesk-QuickSupport.zip"
+            download="AetherDesk-QuickSupport.zip"
             className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-2xl shadow-xl shadow-blue-500/30 transition-all flex items-center justify-center space-x-2 text-sm border border-blue-400/20"
           >
             <Download className="w-5 h-5" />
