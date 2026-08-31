@@ -4,7 +4,7 @@ import { PricingModal } from '../components/PricingModal';
 import { SecurityDashboardModal } from '../components/SecurityDashboardModal';
 import { RemoteDesktopModal } from '../components/RemoteDesktopModal';
 import { LanguageSelector } from '../components/LanguageSelector';
-import { Monitor, Plus, Download, Trash2, Zap, RefreshCw, Crown, ExternalLink, ShieldCheck, Edit3, Globe, Wifi } from 'lucide-react';
+import { Monitor, Plus, Download, Trash2, Zap, RefreshCw, Crown, ExternalLink, ShieldCheck, Edit3, Globe, Wifi, Search, ArrowRight, Radio } from 'lucide-react';
 
 interface DashboardPageProps {
   user: User;
@@ -20,6 +20,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [activeRemoteDevice, setActiveRemoteDevice] = useState<Device | null>(null);
   
+  // Quick ID Connect Bar State
+  const [quickTargetId, setQuickTargetId] = useState('');
+
   // Device Form States
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState('');
@@ -68,7 +71,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
     setDeviceName(dev.name);
     setSessionId(dev.session_id);
     setDirectIp(dev.direct_ip || '');
-    setConnectionMode(dev.direct_ip ? 'DIRECT_LAN' : 'AUTO_P2P');
+    setConnectionMode(dev.direct_ip?.includes('.') && !dev.direct_ip.includes('Cloud') ? 'DIRECT_LAN' : 'AUTO_P2P');
     setIsModalOpen(true);
   };
 
@@ -77,7 +80,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
     try {
       const finalIp = connectionMode === 'DIRECT_LAN' ? directIp : (directIp || 'WebRTC Cloud Relay');
       if (editingDeviceId) {
-        // Update existing device in store
         const updated = devices.map(d => d.id === editingDeviceId ? {
           ...d,
           name: deviceName,
@@ -107,6 +109,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
 
   const handleConnectDevice = (device: Device) => {
     setActiveRemoteDevice(device);
+  };
+
+  const handleQuickConnect = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickTargetId.trim()) return;
+    const cleanId = quickTargetId.trim();
+    
+    // Check if device already exists in address book
+    const existing = devices.find(d => d.session_id.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''));
+    if (existing) {
+      setActiveRemoteDevice(existing);
+    } else {
+      const tempDevice: Device = {
+        id: `quick_${Date.now()}`,
+        user_id: user.id,
+        name: `Uzak Masaüstü (${cleanId})`,
+        session_id: cleanId,
+        is_online: 1,
+        direct_ip: 'WebRTC P2P Auto-Match',
+        direct_port: 8443,
+        last_seen: 'Now'
+      };
+      setActiveRemoteDevice(tempDevice);
+    }
   };
 
   return (
@@ -161,7 +187,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
 
           <button
             onClick={onLogout}
-            className="p-2 rounded-xl bg-slate-900 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 border border-slate-800 transition-all"
+            className="p-2 rounded-xl bg-slate-900 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 border border-slate-800 transition-all cursor-pointer"
             title="Logout"
           >
             <ExternalLink className="w-4 h-4" />
@@ -171,18 +197,58 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
 
       {/* Main Content Area */}
       <main className="flex-1 py-8">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* Top Bar with Add Device */}
+        <div className="max-w-7xl mx-auto space-y-8">
+          
+          {/* Quick Connect by 9-Digit ID Banner */}
+          <div className="glass-card rounded-2xl p-6 border border-blue-500/30 bg-gradient-to-r from-blue-950/40 via-slate-900 to-indigo-950/40 shadow-xl relative overflow-hidden">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-1 max-w-lg">
+                <div className="flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <h2 className="text-base font-bold text-white flex items-center space-x-2">
+                    <Radio className="w-4 h-4 text-blue-400 animate-pulse" />
+                    <span>Hızlı Oturum Bağlantısı (Otomatik ID Eşleştirme)</span>
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Karşı bilgisayarın ekranında yazan 9 haneli ID'yi girin. Sistem otomatik olarak IP ve ağ taraması yaparak WebRTC P2P ile anında bağlanacaktır.
+                </p>
+              </div>
+
+              <form onSubmit={handleQuickConnect} className="flex items-center space-x-2 w-full md:w-auto">
+                <div className="relative flex-1 md:w-72">
+                  <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="9 Haneli ID (Örn: 128 575 981)"
+                    value={quickTargetId}
+                    onChange={(e) => setQuickTargetId(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono tracking-wider text-emerald-400 font-bold placeholder:text-slate-600 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/25 transition-all flex items-center space-x-2 cursor-pointer shrink-0"
+                >
+                  <span>Hemen Bağlan</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Section: Address Book Title Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-100">Registered Devices & Address Book</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Live workstation status, LAN & WAN WebRTC P2P Remote Control</p>
+              <h2 className="text-xl font-bold text-slate-100">Kayıtlı Cihazlar & Adres Defteri</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Sık bağlandığınız bilgisayarlar ve 1-Click uzaktan kontrol listesi</p>
             </div>
 
             <div className="flex items-center space-x-3 w-full sm:w-auto">
               <button
                 onClick={fetchDevices}
-                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 transition-all"
+                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 transition-all cursor-pointer"
                 title="Refresh Devices"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -194,15 +260,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
                 className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-blue-400 border border-blue-500/30 text-xs font-medium transition-all flex items-center space-x-2"
               >
                 <Download className="w-4 h-4" />
-                <span>Tokenized Agent Setup</span>
+                <span>Ajan İndir (.zip)</span>
               </a>
 
               <button
                 onClick={openAddModal}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-medium shadow-lg shadow-blue-500/25 transition-all flex items-center space-x-2"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-medium shadow-lg shadow-blue-500/25 transition-all flex items-center space-x-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Device</span>
+                <span>Yeni Cihaz Kaydet</span>
               </button>
             </div>
           </div>
@@ -218,13 +284,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
               <Monitor className="w-12 h-12 text-slate-600 mx-auto" />
               <div>
                 <h3 className="text-base font-bold text-slate-300">Henüz Kayıtlı Cihaz Yok</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Karşı bilgisayarda Ajanı açın ve ekranda görünen 9 haneli ID'yi "+ Add Device" butonu ile ekleyin.
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  Karşı bilgisayarda Ajanı açın ve ekranda görünen 9 haneli ID'yi yukarıdaki hızlı kutuya girerek hemen bağlanın veya "+ Yeni Cihaz Kaydet" ile listenize ekleyin.
                 </p>
               </div>
               <button
                 onClick={openAddModal}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20"
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 cursor-pointer"
               >
                 + İlk Cihazınızı Ekleyin
               </button>
@@ -257,7 +323,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
                             <h3 className="text-sm font-bold text-slate-100 group-hover:text-blue-400 transition-colors">
                               {device.name}
                             </h3>
-                            <div className="text-[11px] font-mono text-slate-400 tracking-wider">
+                            <div className="text-[11px] font-mono text-emerald-400 font-bold tracking-wider">
                               ID: {device.session_id}
                             </div>
                           </div>
@@ -276,7 +342,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
                       <div className="mt-4 p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1 text-[11px] font-mono">
                         <div className="flex items-center justify-between text-slate-400">
                           <span className="flex items-center space-x-1">
-                            {device.direct_ip?.includes('.') && !device.direct_ip.includes('Cloud') ? (
+                            {device.direct_ip?.includes('.') && !device.direct_ip.includes('Cloud') && !device.direct_ip.includes('Auto') ? (
                               <Wifi className="w-3 h-3 text-emerald-400" />
                             ) : (
                               <Globe className="w-3 h-3 text-blue-400" />
@@ -284,12 +350,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
                             <span>Bağlantı Modu:</span>
                           </span>
                           <span className="text-slate-200 font-bold">
-                            {device.direct_ip?.includes('.') && !device.direct_ip.includes('Cloud') ? 'Yerel Ağ (LAN)' : 'WebRTC P2P (Farklı Ağ)'}
+                            {device.direct_ip?.includes('.') && !device.direct_ip.includes('Cloud') && !device.direct_ip.includes('Auto') ? 'Yerel Ağ (LAN)' : 'WebRTC P2P (Farklı Ağ)'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-slate-500">
                           <span>Hedef IP / Port:</span>
-                          <span className="text-blue-400 font-semibold">{device.direct_ip || 'Otomatik Keşif'}</span>
+                          <span className="text-blue-400 font-semibold">{device.direct_ip || 'Otomatik Eşleştirme'}</span>
                         </div>
                       </div>
                     </div>
@@ -306,7 +372,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
 
                       <button
                         onClick={() => openEditModal(device)}
-                        className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all"
+                        className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all cursor-pointer"
                         title="Cihaz Bilgilerini Düzenle"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -314,7 +380,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
 
                       <button
                         onClick={() => handleDeleteDevice(device.id)}
-                        className="p-2.5 rounded-xl bg-slate-800/50 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700/50 transition-all"
+                        className="p-2.5 rounded-xl bg-slate-800/50 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700/50 transition-all cursor-pointer"
                         title="Adres Defterinden Sil"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -406,7 +472,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
                   </div>
                 ) : (
                   <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 font-mono">
-                    ✓ WebRTC ICE/STUN üzerinden dünyanın her yerinden doğrudan P2P bağlantı kurulur (IP girmeniz gerekmez).
+                    ✓ WebRTC üzerinden dünyanın her yerinden doğrudan P2P bağlantı kurulur (IP girmeniz gerekmez).
                   </div>
                 )}
               </div>

@@ -42,40 +42,6 @@ export interface SecurityAlert {
   created_at: string;
 }
 
-// Initial Mock Devices for Cloud Demo
-const DEFAULT_DEVICES: Device[] = [
-  {
-    id: 'dev_01',
-    user_id: 'usr_admin',
-    name: 'Ana Sunucu (Office Server)',
-    session_id: '482 910 375',
-    is_online: 1,
-    direct_ip: '192.168.1.100',
-    direct_port: 8443,
-    last_seen: 'Just now'
-  },
-  {
-    id: 'dev_02',
-    user_id: 'usr_admin',
-    name: 'Muhasebe Is Istasyonu',
-    session_id: '891 204 153',
-    is_online: 1,
-    direct_ip: '192.168.1.105',
-    direct_port: 8443,
-    last_seen: '2 mins ago'
-  },
-  {
-    id: 'dev_03',
-    user_id: 'usr_admin',
-    name: 'Yonetici Laptop (Remote)',
-    session_id: '739 184 920',
-    is_online: 0,
-    direct_ip: '192.168.1.110',
-    direct_port: 8443,
-    last_seen: '1 hour ago'
-  }
-];
-
 export class ApiService {
   private static getToken(): string | null {
     return localStorage.getItem('aether_token');
@@ -102,16 +68,15 @@ export class ApiService {
     localStorage.setItem('aether_user', JSON.stringify(user));
   }
 
-  private static getStoredDevices(): Device[] {
+  public static getStoredDevices(): Device[] {
     const devStr = localStorage.getItem('aether_devices');
     if (devStr) {
-      try { return JSON.parse(devStr); } catch { return DEFAULT_DEVICES; }
+      try { return JSON.parse(devStr); } catch { return []; }
     }
-    localStorage.setItem('aether_devices', JSON.stringify(DEFAULT_DEVICES));
-    return DEFAULT_DEVICES;
+    return [];
   }
 
-  private static setStoredDevices(devices: Device[]): void {
+  public static setStoredDevices(devices: Device[]): void {
     localStorage.setItem('aether_devices', JSON.stringify(devices));
   }
 
@@ -136,13 +101,11 @@ export class ApiService {
       if (!res.ok) throw new Error(data.message || 'API request failed');
       return data;
     } catch {
-      // Fallback seamlessly to local simulation
       return null;
     }
   }
 
   public static async login(email: string, password: string): Promise<{ token: string; user: User }> {
-    // 1. Try real backend first if accessible
     const backendRes = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
@@ -153,7 +116,7 @@ export class ApiService {
       return backendRes;
     }
 
-    // 2. Client-Side Authentication Fallback (for Vercel Cloud)
+    // Default Administrator or Registered User Fallback
     let user: User;
     if (email.toLowerCase().includes('admin') || password === 'admin2026') {
       user = {
@@ -210,7 +173,12 @@ export class ApiService {
     return { token, user };
   }
 
-  public static async getCurrentUser(): Promise<{ user: User }> {
+  public static async getCurrentUser(): Promise<{ user: User | null }> {
+    const token = this.getToken();
+    if (!token) {
+      return { user: null };
+    }
+
     const backendRes = await this.request('/auth/me');
     if (backendRes?.user) {
       this.setStoredUser(backendRes.user);
@@ -218,25 +186,12 @@ export class ApiService {
     }
 
     const stored = this.getStoredUser();
-    if (stored) {
-      return { user: stored };
-    }
-
-    const defaultAdmin: User = {
-      id: 'usr_admin_01',
-      email: 'admin@aetherdesk.com',
-      name: 'System Administrator',
-      role: 'ADMIN',
-      company: 'AetherDesk Enterprise HQ',
-      plan: 'PRO',
-      subscription_status: 'ACTIVE'
-    };
-    return { user: defaultAdmin };
+    return { user: stored || null };
   }
 
   public static async getDevices(): Promise<{ devices: Device[] }> {
     const backendRes = await this.request('/devices');
-    if (backendRes?.devices) {
+    if (backendRes?.devices && backendRes.devices.length > 0) {
       this.setStoredDevices(backendRes.devices);
       return backendRes;
     }
@@ -244,27 +199,21 @@ export class ApiService {
   }
 
   public static async addDevice(name: string, session_id: string, direct_ip?: string, direct_port?: number): Promise<{ device: Device }> {
-    const backendRes = await this.request('/devices', {
-      method: 'POST',
-      body: JSON.stringify({ name, session_id, direct_ip, direct_port }),
-    });
-
-    if (backendRes?.device) {
-      return backendRes;
-    }
+    const cleanSessionId = session_id.trim();
+    const cleanIp = direct_ip?.trim() || 'WebRTC Cloud Relay';
 
     const newDevice: Device = {
       id: `dev_${Math.random().toString(36).substring(2, 9)}`,
       user_id: 'usr_admin',
-      name: name || 'Remote Workstation',
-      session_id: session_id || '482 910 375',
+      name: name || `Workstation (${cleanSessionId})`,
+      session_id: cleanSessionId,
       is_online: 1,
-      direct_ip: direct_ip || '192.168.1.100',
+      direct_ip: cleanIp,
       direct_port: direct_port || 8443,
       last_seen: 'Just now'
     };
 
-    const devices = this.getStoredDevices();
+    const devices = this.getStoredDevices().filter(d => d.session_id !== cleanSessionId);
     devices.unshift(newDevice);
     this.setStoredDevices(devices);
     return { device: newDevice };
@@ -331,33 +280,8 @@ export class ApiService {
 
   public static async getSecurityAlerts(): Promise<{ alerts: SecurityAlert[]; stats: { total_alerts: number; critical_count: number; active_count: number } }> {
     return {
-      alerts: [
-        {
-          id: 'alt_01',
-          device_id: 'dev_01',
-          device_name: 'Ana Sunucu (Office Server)',
-          alert_type: 'PORT_SCAN_ATTEMPT',
-          severity: 'HIGH',
-          details: '8443 Direct Portu uzerinde 14 basarisiz handshake girisimi engellendi.',
-          status: 'ACTIVE',
-          created_at: '10 mins ago'
-        },
-        {
-          id: 'alt_02',
-          device_id: 'dev_02',
-          device_name: 'Muhasebe Is Istasyonu',
-          alert_type: 'UNAUTHORIZED_CLIPBOARD',
-          severity: 'LOW',
-          details: 'Pano senkronizasyonunda 64KB boyut asimi engellendi.',
-          status: 'RESOLVED',
-          created_at: '2 hours ago'
-        }
-      ],
-      stats: {
-        total_alerts: 2,
-        critical_count: 0,
-        active_count: 1
-      }
+      alerts: [],
+      stats: { total_alerts: 0, critical_count: 0, active_count: 0 }
     };
   }
 
