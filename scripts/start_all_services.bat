@@ -8,15 +8,13 @@ echo        AetherDesk MASTER SYSTEM LAUNCHER
 echo =======================================================================
 echo.
 
-:: ── ADIM 0: Onceki surecleri temizle ────────────────────────────────────────
-echo [0] Onceki servis surecleri temizleniyor...
+:: ── ADIM 0: Onceki surecleri temizle (Sadece AetherDesk portlari) ──────────
+echo [0] AetherDesk portlari (8080, 5000, 9000, 9090) temizleniyor...
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8080 :5000 :9000 :9090"') do (
     taskkill /F /PID %%a >nul 2>&1
 )
-taskkill /F /IM node.exe >nul 2>&1
-taskkill /F /IM ts-node.exe >nul 2>&1
-timeout /t 2 /nobreak >nul
-echo     Temizlendi.
+timeout /t 1 /nobreak >nul
+echo     AetherDesk portlari temizlendi.
 echo.
 
 :: ── ADIM 1: Servisleri ayri CMD pencerelerinde baslat ───────────────────────
