@@ -284,7 +284,7 @@ $txtLog.BackColor  = [System.Drawing.Color]::FromArgb(9, 13, 22)
 $txtLog.ForeColor  = [System.Drawing.Color]::FromArgb(52, 211, 153)
 $txtLog.Location   = New-Object System.Drawing.Point(30, 296)
 $txtLog.Size       = New-Object System.Drawing.Size(480, 260)
-$txtLog.Text       = "[INFO] AetherDesk Control Center Hazir.`r`nCanli GitHub  : https://github.com/gandalff/AetherDesk`r`nCanli Vercel  : https://frontend-ecru-beta-82.vercel.app`r`n"
+$txtLog.Text       = "[INFO] AetherDesk Control Center Hazir.`r`nCanli GitHub  : https://github.com/gandalff/AetherDesk`r`nCanli Vercel  : https://aetherdesk-control.vercel.app`r`n"
 $form.Controls.Add($txtLog)
 
 # ── GitHub Butonu ─────────────────────────────────────────────────────────────
@@ -351,7 +351,7 @@ $pollTimer.Add_Tick({
         if ($script:activeTask -eq "DEPLOY") {
             Write-Log "=== DEPLOY TAMAMLANDI ==="
             [System.Windows.Forms.MessageBox]::Show(
-                "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandalff/AetherDesk`r`nVercel : https://frontend-ecru-beta-82.vercel.app",
+                "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandalff/AetherDesk`r`nVercel : https://aetherdesk-control.vercel.app",
                 "AetherDesk Deploy Tamamlandi",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information
@@ -437,7 +437,7 @@ $btn2.Add_Click({
 
         QProg 95; Set-Location $rootDir
         QLog "[OK] Vercel deploy tamamlandi."
-        QLog "CANLI: https://frontend-ecru-beta-82.vercel.app"
+        QLog "CANLI: https://aetherdesk-control.vercel.app"
 
     }).AddParameters(@{ rootDir = $_rootDir; msgQ = $_msgQ; progQ = $_progQ })
 
