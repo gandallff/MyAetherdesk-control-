@@ -41,7 +41,7 @@ $txtLog.BackColor = [System.Drawing.Color]::FromArgb(9, 13, 22)
 $txtLog.ForeColor = [System.Drawing.Color]::FromArgb(52, 211, 153)
 $txtLog.Location = New-Object System.Drawing.Point(30, 80)
 $txtLog.Size = New-Object System.Drawing.Size(480, 220)
-$txtLog.Text = "[INFO] AetherDesk Cloud Deployer Hazir.`r`nCanli GitHub: https://github.com/gandalff/AetherDesk`r`nCanli Vercel: https://aetherdesk-saas-portal-nine.vercel.app`r`n"
+$txtLog.Text = "[INFO] AetherDesk Cloud Deployer Hazir.`r`nCanli GitHub: https://github.com/gandalff/AetherDesk`r`nCanli Vercel: https://frontend-ecru-beta-82.vercel.app`r`n"
 $form.Controls.Add($txtLog)
 
 function Write-Log($msg) {
@@ -103,7 +103,7 @@ $btnVercel.Add_Click({
     Set-Location "$rootDir\saas-portal\frontend"
     npx --yes vercel --prod --yes | Out-Null
     Set-Location "$rootDir"
-    Write-Log "✓ Vercel Canli Yayin Guncellendi! (https://aetherdesk-saas-portal-nine.vercel.app)"
+    Write-Log "✓ Vercel Canli Yayin Guncellendi! (https://frontend-ecru-beta-82.vercel.app)"
     $btnVercel.Enabled = $true
 })
 $form.Controls.Add($btnVercel)
@@ -139,7 +139,7 @@ $btnAll.Add_Click({
     npx --yes vercel --prod --yes | Out-Null
     Set-Location "$rootDir"
     Write-Log "✓ Vercel Canli Yayin Tamamlandi!"
-    Write-Log "🎉 VERCEL CANLI ADRES: https://aetherdesk-saas-portal-nine.vercel.app"
+    Write-Log "🎉 VERCEL CANLI ADRES: https://frontend-ecru-beta-82.vercel.app"
     
     $btnAll.Enabled = $true
 })
