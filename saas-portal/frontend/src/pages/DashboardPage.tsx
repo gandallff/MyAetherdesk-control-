@@ -462,17 +462,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
                   <div>
                     <input
                       type="text"
-                      placeholder="Örn: 192.168.1.34:8443"
+                      placeholder="Örn: 192.168.1.34:8443 (Boş bırakırsanız otomatik taranır)"
                       value={directIp}
                       onChange={(e) => setDirectIp(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-100 focus:outline-none focus:border-blue-500"
-                      required
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">Karşı bilgisayarın ajanında "Yerel IP (LAN)" kısmında yazan IP adresini girin.</p>
+                    <p className="text-[10px] text-slate-500 mt-1">İsteğe bağlıdır. Karşı bilgisayarın ajanında yazan IP adresidir.</p>
                   </div>
                 ) : (
                   <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 font-mono">
-                    ✓ WebRTC üzerinden dünyanın her yerinden doğrudan P2P bağlantı kurulur (IP girmeniz gerekmez).
+                    ✓ Otomatik P2P: Dünyanın her yerinden doğrudan 9 haneli ID ile bağlanılır (IP girmeniz gerekmez).
                   </div>
                 )}
               </div>
