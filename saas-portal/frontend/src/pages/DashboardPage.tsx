@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiService, Device, User } from '../services/api';
 import { PricingModal } from '../components/PricingModal';
 import { SecurityDashboardModal } from '../components/SecurityDashboardModal';
+import { RemoteDesktopModal } from '../components/RemoteDesktopModal';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { Monitor, Plus, Download, Trash2, Power, Zap, RefreshCw, Crown, ExternalLink, Network, ShieldCheck } from 'lucide-react';
 
@@ -17,6 +18,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPricingOpen, setIsPricingOpen] = useState(false);
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+  const [activeRemoteDevice, setActiveRemoteDevice] = useState<Device | null>(null);
   const [deviceName, setDeviceName] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [directIp, setDirectIp] = useState('192.168.1.100');
@@ -86,7 +88,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
   };
 
   const handleConnectDevice = (device: Device) => {
-    window.open(`http://localhost:9000?targetId=${device.session_id}`, '_blank');
+    setActiveRemoteDevice(device);
   };
 
   return (
@@ -376,6 +378,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
       <SecurityDashboardModal
         isOpen={isSecurityOpen}
         onClose={() => setIsSecurityOpen(false)}
+      />
+
+      {/* Remote Desktop Live Stream Modal */}
+      <RemoteDesktopModal
+        device={activeRemoteDevice}
+        isOpen={!!activeRemoteDevice}
+        onClose={() => setActiveRemoteDevice(null)}
       />
 
       {/* Footer Status */}

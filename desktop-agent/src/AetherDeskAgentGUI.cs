@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Windows.Forms;
 using System.Threading;
+using Microsoft.Win32;
 
 namespace AetherDesk.Agent
 {
@@ -31,11 +32,16 @@ namespace AetherDesk.Agent
         private Panel statusDot;
         private Label lblPassTag;
         private TextBox txtPassword;
+        private string mySessionId;
+        private HttpListener listener;
+        private Thread listenThread;
 
         public AgentMainForm()
         {
-            this.Text = "AetherDesk Remote Agent 2026";
-            this.Size = new Size(500, 480);
+            this.mySessionId = GetOrCreateUniqueSessionId();
+
+            this.Text = "AetherDesk Remote Agent 2026 - ID: " + this.mySessionId;
+            this.Size = new Size(500, 490);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -63,7 +69,7 @@ namespace AetherDesk.Agent
             // Card Panel
             panelCard = new Panel();
             panelCard.Location = new Point(30, 90);
-            panelCard.Size = new Size(424, 210);
+            panelCard.Size = new Size(424, 215);
             panelCard.BackColor = Color.FromArgb(20, 29, 47);
             this.Controls.Add(panelCard);
 
@@ -84,7 +90,7 @@ namespace AetherDesk.Agent
 
             // Session ID Tag
             lblIdTag = new Label();
-            lblIdTag.Text = "SIZIN OTURUM ID NUMARANIZ:";
+            lblIdTag.Text = "BU BILGISAYARIN OZEL OTURUM ID'SI:";
             lblIdTag.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblIdTag.ForeColor = Color.FromArgb(148, 163, 184);
             lblIdTag.Location = new Point(20, 48);
@@ -93,7 +99,7 @@ namespace AetherDesk.Agent
 
             // Large 9-Digit Session ID
             lblSessionId = new Label();
-            lblSessionId.Text = "482 910 375";
+            lblSessionId.Text = this.mySessionId;
             lblSessionId.Font = new Font("Consolas", 24, FontStyle.Bold);
             lblSessionId.ForeColor = Color.FromArgb(96, 165, 250);
             lblSessionId.Location = new Point(20, 68);
@@ -111,7 +117,7 @@ namespace AetherDesk.Agent
             btnCopy.Size = new Size(120, 36);
             btnCopy.Cursor = Cursors.Hand;
             btnCopy.Click += (s, e) => {
-                Clipboard.SetText("482910375");
+                Clipboard.SetText(this.mySessionId.Replace(" ", ""));
                 btnCopy.Text = "✓ Kopyalandi!";
                 btnCopy.BackColor = Color.FromArgb(16, 185, 129);
             };
@@ -129,11 +135,11 @@ namespace AetherDesk.Agent
 
             // Unattended Access Password
             lblPassTag = new Label();
-            lblPassTag.Text = "Erisim Sifresi:";
+            lblPassTag.Text = "Sifresiz/Otomatik Erisim:";
             lblPassTag.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             lblPassTag.ForeColor = Color.FromArgb(203, 213, 225);
-            lblPassTag.Location = new Point(20, 160);
-            lblPassTag.Size = new Size(100, 22);
+            lblPassTag.Location = new Point(20, 162);
+            lblPassTag.Size = new Size(150, 22);
             panelCard.Controls.Add(lblPassTag);
 
             txtPassword = new TextBox();
@@ -141,19 +147,83 @@ namespace AetherDesk.Agent
             txtPassword.Font = new Font("Consolas", 10);
             txtPassword.BackColor = Color.FromArgb(15, 23, 42);
             txtPassword.ForeColor = Color.FromArgb(245, 158, 11);
-            txtPassword.Location = new Point(125, 158);
-            txtPassword.Size = new Size(140, 24);
+            txtPassword.Location = new Point(175, 160);
+            txtPassword.Size = new Size(110, 24);
             txtPassword.ReadOnly = true;
             panelCard.Controls.Add(txtPassword);
 
             // Bottom Instructions
             Label lblFooter = new Label();
-            lblFooter.Text = "Bu oturum numarasini size baglanacak olan AetherDesk uzmanina iletiniz. Guvenli baglanti basladiginda bildirim alacaksiniz.";
+            lblFooter.Text = "Bu 9 haneli numarayi portala (veya yoneticiye) iletiniz. Baglanti kuruldugunda otomatik erisim saglanacak ve bildirim goruntulenecektir.";
             lblFooter.Font = new Font("Segoe UI", 8.5f);
             lblFooter.ForeColor = Color.FromArgb(100, 116, 139);
-            lblFooter.Location = new Point(30, 320);
-            lblFooter.Size = new Size(420, 45);
+            lblFooter.Location = new Point(30, 325);
+            lblFooter.Size = new Size(420, 50);
             this.Controls.Add(lblFooter);
+
+            // Start Direct Socket / Incoming Listener
+            StartListener();
+        }
+
+        private string GetOrCreateUniqueSessionId()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
+                {
+                    object val = key.GetValue("SessionId");
+                    if (val != null && !string.IsNullOrEmpty(val.ToString()))
+                    {
+                        return val.ToString();
+                    }
+                    // Generate new unique 9-digit format (XXX XXX XXX)
+                    Random rnd = new Random();
+                    string newId = string.Format("{0:D3} {1:D3} {2:D3}", rnd.Next(100, 999), rnd.Next(100, 999), rnd.Next(100, 999));
+                    key.SetValue("SessionId", newId);
+                    return newId;
+                }
+            }
+            catch
+            {
+                Random rnd = new Random();
+                return string.Format("{0:D3} {1:D3} {2:D3}", rnd.Next(100, 999), rnd.Next(100, 999), rnd.Next(100, 999));
+            }
+        }
+
+        private void StartListener()
+        {
+            try
+            {
+                listener = new HttpListener();
+                listener.Prefixes.Add("http://*:8443/");
+                listener.Start();
+                listenThread = new Thread(ListenLoop);
+                listenThread.IsBackground = true;
+                listenThread.Start();
+            }
+            catch { }
+        }
+
+        private void ListenLoop()
+        {
+            while (listener != null && listener.IsListening)
+            {
+                try
+                {
+                    HttpListenerContext ctx = listener.GetContext();
+                    this.Invoke((MethodInvoker)delegate {
+                        statusDot.BackColor = Color.FromArgb(96, 165, 250);
+                        lblStatus.Text = "UZAKTAN BAGLANTI AKTIF";
+                        lblStatus.ForeColor = Color.FromArgb(96, 165, 250);
+                    });
+
+                    byte[] buf = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"connected\",\"session\":\"" + this.mySessionId + "\"}");
+                    ctx.Response.ContentType = "application/json";
+                    ctx.Response.OutputStream.Write(buf, 0, buf.Length);
+                    ctx.Response.Close();
+                }
+                catch { }
+            }
         }
 
         private string GetLocalIp()
