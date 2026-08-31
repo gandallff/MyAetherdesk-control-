@@ -30,8 +30,16 @@ namespace AetherDesk.Agent
         private Label lblIpInfo;
         private Label lblStatus;
         private Panel statusDot;
-        private Label lblPassTag;
-        private TextBox txtPassword;
+
+        // Settings Controls
+        private GroupBox grpAccessSettings;
+        private RadioButton rbUnattended;
+        private RadioButton rbPassword;
+        private RadioButton rbPrompt;
+        private TextBox txtCustomPassword;
+        private Label lblPassNote;
+        private Button btnSaveSettings;
+
         private string mySessionId;
         private HttpListener listener;
         private Thread listenThread;
@@ -41,7 +49,7 @@ namespace AetherDesk.Agent
             this.mySessionId = GetOrCreateUniqueSessionId();
 
             this.Text = "AetherDesk Remote Agent 2026 - ID: " + this.mySessionId;
-            this.Size = new Size(500, 490);
+            this.Size = new Size(520, 580);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -53,8 +61,8 @@ namespace AetherDesk.Agent
             lblTitle.Text = "⚡ AetherDesk QuickSupport";
             lblTitle.Font = new Font("Segoe UI", 16, FontStyle.Bold);
             lblTitle.ForeColor = Color.FromArgb(96, 165, 250);
-            lblTitle.Location = new Point(30, 24);
-            lblTitle.Size = new Size(420, 32);
+            lblTitle.Location = new Point(30, 20);
+            lblTitle.Size = new Size(440, 32);
             this.Controls.Add(lblTitle);
 
             // Subtitle
@@ -62,20 +70,20 @@ namespace AetherDesk.Agent
             lblSub.Text = "Bilgisayariniz uzaktan erisime ve guvenli baglantiya hazir.";
             lblSub.Font = new Font("Segoe UI", 9);
             lblSub.ForeColor = Color.FromArgb(148, 163, 184);
-            lblSub.Location = new Point(30, 58);
-            lblSub.Size = new Size(420, 20);
+            lblSub.Location = new Point(30, 52);
+            lblSub.Size = new Size(440, 20);
             this.Controls.Add(lblSub);
 
-            // Card Panel
+            // Card Panel (ID & Status)
             panelCard = new Panel();
-            panelCard.Location = new Point(30, 90);
-            panelCard.Size = new Size(424, 215);
+            panelCard.Location = new Point(30, 80);
+            panelCard.Size = new Size(444, 150);
             panelCard.BackColor = Color.FromArgb(20, 29, 47);
             this.Controls.Add(panelCard);
 
             // Status Indicator
             statusDot = new Panel();
-            statusDot.Location = new Point(20, 18);
+            statusDot.Location = new Point(20, 16);
             statusDot.Size = new Size(12, 12);
             statusDot.BackColor = Color.FromArgb(52, 211, 153);
             panelCard.Controls.Add(statusDot);
@@ -84,7 +92,7 @@ namespace AetherDesk.Agent
             lblStatus.Text = "BAGLANTIYA HAZIR (ONLINE)";
             lblStatus.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
-            lblStatus.Location = new Point(38, 16);
+            lblStatus.Location = new Point(38, 14);
             lblStatus.Size = new Size(200, 18);
             panelCard.Controls.Add(lblStatus);
 
@@ -93,7 +101,7 @@ namespace AetherDesk.Agent
             lblIdTag.Text = "BU BILGISAYARIN OZEL OTURUM ID'SI:";
             lblIdTag.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblIdTag.ForeColor = Color.FromArgb(148, 163, 184);
-            lblIdTag.Location = new Point(20, 48);
+            lblIdTag.Location = new Point(20, 42);
             lblIdTag.Size = new Size(380, 16);
             panelCard.Controls.Add(lblIdTag);
 
@@ -102,8 +110,8 @@ namespace AetherDesk.Agent
             lblSessionId.Text = this.mySessionId;
             lblSessionId.Font = new Font("Consolas", 24, FontStyle.Bold);
             lblSessionId.ForeColor = Color.FromArgb(96, 165, 250);
-            lblSessionId.Location = new Point(20, 68);
-            lblSessionId.Size = new Size(260, 44);
+            lblSessionId.Location = new Point(20, 60);
+            lblSessionId.Size = new Size(270, 44);
             panelCard.Controls.Add(lblSessionId);
 
             // Copy ID Button
@@ -113,8 +121,8 @@ namespace AetherDesk.Agent
             btnCopy.ForeColor = Color.White;
             btnCopy.BackColor = Color.FromArgb(37, 99, 235);
             btnCopy.FlatStyle = FlatStyle.Flat;
-            btnCopy.Location = new Point(285, 72);
-            btnCopy.Size = new Size(120, 36);
+            btnCopy.Location = new Point(300, 64);
+            btnCopy.Size = new Size(125, 36);
             btnCopy.Cursor = Cursors.Hand;
             btnCopy.Click += (s, e) => {
                 Clipboard.SetText(this.mySessionId.Replace(" ", ""));
@@ -129,40 +137,159 @@ namespace AetherDesk.Agent
             lblIpInfo.Text = "Yerel IP (LAN): " + localIp + ":8443";
             lblIpInfo.Font = new Font("Consolas", 9);
             lblIpInfo.ForeColor = Color.FromArgb(148, 163, 184);
-            lblIpInfo.Location = new Point(20, 125);
+            lblIpInfo.Location = new Point(20, 115);
             lblIpInfo.Size = new Size(380, 20);
             panelCard.Controls.Add(lblIpInfo);
 
-            // Unattended Access Password
-            lblPassTag = new Label();
-            lblPassTag.Text = "Sifresiz/Otomatik Erisim:";
-            lblPassTag.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-            lblPassTag.ForeColor = Color.FromArgb(203, 213, 225);
-            lblPassTag.Location = new Point(20, 162);
-            lblPassTag.Size = new Size(150, 22);
-            panelCard.Controls.Add(lblPassTag);
+            // GroupBox: Access & Security Settings
+            grpAccessSettings = new GroupBox();
+            grpAccessSettings.Text = " 🔒 Erisim ve Guvenlik Ayarlari ";
+            grpAccessSettings.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            grpAccessSettings.ForeColor = Color.FromArgb(96, 165, 250);
+            grpAccessSettings.Location = new Point(30, 245);
+            grpAccessSettings.Size = new Size(444, 210);
+            this.Controls.Add(grpAccessSettings);
 
-            txtPassword = new TextBox();
-            txtPassword.Text = "aether2026";
-            txtPassword.Font = new Font("Consolas", 10);
-            txtPassword.BackColor = Color.FromArgb(15, 23, 42);
-            txtPassword.ForeColor = Color.FromArgb(245, 158, 11);
-            txtPassword.Location = new Point(175, 160);
-            txtPassword.Size = new Size(110, 24);
-            txtPassword.ReadOnly = true;
-            panelCard.Controls.Add(txtPassword);
+            // Option 1: Unattended (Passwordless / Auto-Accept)
+            rbUnattended = new RadioButton();
+            rbUnattended.Text = "Katilimsiz Erisim (Sifresiz Otomatik Baglanti)";
+            rbUnattended.Font = new Font("Segoe UI", 8.5f);
+            rbUnattended.ForeColor = Color.FromArgb(226, 232, 240);
+            rbUnattended.Location = new Point(20, 28);
+            rbUnattended.Size = new Size(400, 22);
+            rbUnattended.CheckedChanged += (s, e) => UpdateAccessModeUI();
+            grpAccessSettings.Controls.Add(rbUnattended);
+
+            // Option 2: Password Protected
+            rbPassword = new RadioButton();
+            rbPassword.Text = "Ozel Sifreli Erisim (Baglanan kisiye sifre sorulsun)";
+            rbPassword.Font = new Font("Segoe UI", 8.5f);
+            rbPassword.ForeColor = Color.FromArgb(226, 232, 240);
+            rbPassword.Location = new Point(20, 56);
+            rbPassword.Size = new Size(400, 22);
+            rbPassword.CheckedChanged += (s, e) => UpdateAccessModeUI();
+            grpAccessSettings.Controls.Add(rbPassword);
+
+            // Custom Password Box
+            txtCustomPassword = new TextBox();
+            txtCustomPassword.Font = new Font("Consolas", 10);
+            txtCustomPassword.BackColor = Color.FromArgb(15, 23, 42);
+            txtCustomPassword.ForeColor = Color.FromArgb(245, 158, 11);
+            txtCustomPassword.Location = new Point(40, 84);
+            txtCustomPassword.Size = new Size(180, 25);
+            grpAccessSettings.Controls.Add(txtCustomPassword);
+
+            lblPassNote = new Label();
+            lblPassNote.Text = "(Baglanti icin gereken sifreyi belirleyin)";
+            lblPassNote.Font = new Font("Segoe UI", 8);
+            lblPassNote.ForeColor = Color.FromArgb(148, 163, 184);
+            lblPassNote.Location = new Point(230, 87);
+            lblPassNote.Size = new Size(200, 20);
+            grpAccessSettings.Controls.Add(lblPassNote);
+
+            // Option 3: Manual Confirmation Popup
+            rbPrompt = new RadioButton();
+            rbPrompt.Text = "Her Baglantida Ekranda Onay Iste (Manuel Kabul)";
+            rbPrompt.Font = new Font("Segoe UI", 8.5f);
+            rbPrompt.ForeColor = Color.FromArgb(226, 232, 240);
+            rbPrompt.Location = new Point(20, 118);
+            rbPrompt.Size = new Size(400, 22);
+            rbPrompt.CheckedChanged += (s, e) => UpdateAccessModeUI();
+            grpAccessSettings.Controls.Add(rbPrompt);
+
+            // Save Settings Button
+            btnSaveSettings = new Button();
+            btnSaveSettings.Text = "Ayarlari Kaydet";
+            btnSaveSettings.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnSaveSettings.ForeColor = Color.White;
+            btnSaveSettings.BackColor = Color.FromArgb(16, 185, 129);
+            btnSaveSettings.FlatStyle = FlatStyle.Flat;
+            btnSaveSettings.Location = new Point(20, 158);
+            btnSaveSettings.Size = new Size(404, 34);
+            btnSaveSettings.Cursor = Cursors.Hand;
+            btnSaveSettings.Click += (s, e) => SaveAccessSettings();
+            grpAccessSettings.Controls.Add(btnSaveSettings);
 
             // Bottom Instructions
             Label lblFooter = new Label();
-            lblFooter.Text = "Bu 9 haneli numarayi portala (veya yoneticiye) iletiniz. Baglanti kuruldugunda otomatik erisim saglanacak ve bildirim goruntulenecektir.";
+            lblFooter.Text = "Oturum numarasini yoneticiye iletiniz. Baglanti guvenlik ayarlariniza gore saglanacaktir.";
             lblFooter.Font = new Font("Segoe UI", 8.5f);
             lblFooter.ForeColor = Color.FromArgb(100, 116, 139);
-            lblFooter.Location = new Point(30, 325);
-            lblFooter.Size = new Size(420, 50);
+            lblFooter.Location = new Point(30, 465);
+            lblFooter.Size = new Size(440, 40);
             this.Controls.Add(lblFooter);
 
-            // Start Direct Socket / Incoming Listener
+            // Load Saved Settings from Registry
+            LoadSavedAccessSettings();
+
+            // Start Listener
             StartListener();
+        }
+
+        private void UpdateAccessModeUI()
+        {
+            txtCustomPassword.Enabled = rbPassword.Checked;
+            if (rbPassword.Checked && string.IsNullOrEmpty(txtCustomPassword.Text))
+            {
+                txtCustomPassword.Text = "aether2026";
+            }
+        }
+
+        private void LoadSavedAccessSettings()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
+                {
+                    string mode = (key.GetValue("AccessMode") ?? "UNATTENDED").ToString();
+                    string pass = (key.GetValue("AccessPassword") ?? "aether2026").ToString();
+                    txtCustomPassword.Text = pass;
+
+                    if (mode == "PASSWORD")
+                        rbPassword.Checked = true;
+                    else if (mode == "PROMPT")
+                        rbPrompt.Checked = true;
+                    else
+                        rbUnattended.Checked = true;
+                }
+            }
+            catch
+            {
+                rbUnattended.Checked = true;
+                txtCustomPassword.Text = "aether2026";
+            }
+            UpdateAccessModeUI();
+        }
+
+        private void SaveAccessSettings()
+        {
+            try
+            {
+                string mode = "UNATTENDED";
+                if (rbPassword.Checked) mode = "PASSWORD";
+                else if (rbPrompt.Checked) mode = "PROMPT";
+
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
+                {
+                    key.SetValue("AccessMode", mode);
+                    key.SetValue("AccessPassword", txtCustomPassword.Text.Trim());
+                }
+
+                btnSaveSettings.Text = "✓ Ayarlar Basariyla Kaydedildi!";
+                btnSaveSettings.BackColor = Color.FromArgb(5, 150, 105);
+                System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+                t.Interval = 2500;
+                t.Tick += (s, e) => {
+                    btnSaveSettings.Text = "Ayarlari Kaydet";
+                    btnSaveSettings.BackColor = Color.FromArgb(16, 185, 129);
+                    t.Stop();
+                };
+                t.Start();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ayar kaydedilemedi: " + ex.Message);
+            }
         }
 
         private string GetOrCreateUniqueSessionId()
@@ -176,7 +303,6 @@ namespace AetherDesk.Agent
                     {
                         return val.ToString();
                     }
-                    // Generate new unique 9-digit format (XXX XXX XXX)
                     Random rnd = new Random();
                     string newId = string.Format("{0:D3} {1:D3} {2:D3}", rnd.Next(100, 999), rnd.Next(100, 999), rnd.Next(100, 999));
                     key.SetValue("SessionId", newId);

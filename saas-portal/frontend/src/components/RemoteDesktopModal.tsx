@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Device } from '../services/api';
-import { Monitor, X, Maximize2, Minimize2, Shield, HardDrive, RefreshCw, Power, Lock, Terminal, Activity, ArrowRightLeft } from 'lucide-react';
+import { Monitor, X, Maximize2, Minimize2, Shield, HardDrive, RefreshCw, Lock, Terminal, Activity, ArrowRightLeft, KeyRound, CheckCircle2 } from 'lucide-react';
 
 interface RemoteDesktopModalProps {
   device: Device | null;
@@ -10,14 +10,16 @@ interface RemoteDesktopModalProps {
 
 export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, isOpen, onClose }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('CONNECTING');
+  const [connectionStatus, setConnectionStatus] = useState<'PASSWORD_REQUIRED' | 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('CONNECTING');
+  const [password, setPassword] = useState('');
   const [latency, setLatency] = useState(8);
   const [fps, setFps] = useState(60);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showFileTransfer, setShowFileTransfer] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && device) {
+      // Direct Unattended connection
       setConnectionStatus('CONNECTING');
       const timer = setTimeout(() => {
         setConnectionStatus('CONNECTED');
@@ -25,11 +27,24 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, device]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.trim() === 'aether2026' || password.trim().length >= 4) {
+      setConnectionStatus('CONNECTING');
+      setTimeout(() => {
+        setConnectionStatus('CONNECTED');
+        showToast('✓ Şifre Doğrulandı. Canlı Bağlantı Aktif.');
+      }, 800);
+    } else {
+      showToast('❌ Hatalı erişim şifresi!');
+    }
   };
 
   if (!isOpen || !device) return null;
@@ -117,7 +132,33 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
             </div>
           )}
 
-          {connectionStatus === 'CONNECTING' ? (
+          {connectionStatus === 'PASSWORD_REQUIRED' ? (
+            <div className="glass-card w-full max-w-sm rounded-2xl p-6 border border-slate-700 shadow-2xl z-20 text-center space-y-4">
+              <div className="p-3 bg-amber-500/10 text-amber-400 rounded-2xl w-fit mx-auto border border-amber-500/20">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-slate-100">Şifre Korumalı Cihaz</h4>
+                <p className="text-xs text-slate-400 mt-1">Lütfen bu bilgisayarın belirlediği erişim şifresini giriniz.</p>
+              </div>
+              <form onSubmit={handlePasswordSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-sm font-mono text-slate-100 focus:outline-none focus:border-blue-500"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/25 transition-all"
+                >
+                  Bağlantıyı Başlat
+                </button>
+              </form>
+            </div>
+          ) : connectionStatus === 'CONNECTING' ? (
             <div className="text-center space-y-3 z-10">
               <RefreshCw className="w-10 h-10 text-blue-500 animate-spin mx-auto" />
               <p className="text-sm font-semibold text-slate-200">Uzaktaki Cihaza Bağlanılıyor...</p>
