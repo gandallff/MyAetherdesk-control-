@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "buildCommand": "cd saas-portal/frontend && npm install && npm run build",
+  "outputDirectory": "saas-portal/frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/aetherdesk-agent.exe",
+      "destination": "/aetherdesk-agent.exe"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

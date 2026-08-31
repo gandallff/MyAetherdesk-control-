@@ -1,0 +1,8 @@
+{
+  "name": "my-aetherdesk-control",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd saas-portal/frontend && npm install && npm run build"
+  }
+}
