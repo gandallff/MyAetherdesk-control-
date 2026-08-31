@@ -9,12 +9,48 @@
       "destination": "/assets/$1"
     },
     {
+      "source": "/AetherDesk-QuickSupport.zip",
+      "destination": "/AetherDesk-QuickSupport.zip"
+    },
+    {
       "source": "/aetherdesk-agent.exe",
       "destination": "/aetherdesk-agent.exe"
     },
     {
+      "source": "/AetherDesk-QuickSupport.bat",
+      "destination": "/AetherDesk-QuickSupport.bat"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/AetherDesk-QuickSupport.zip",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/zip"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"AetherDesk-QuickSupport.zip\""
+        }
+      ]
+    },
+    {
+      "source": "/aetherdesk-agent.exe",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/octet-stream"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"aetherdesk-agent.exe\""
+        }
+      ]
     }
   ]
 }
