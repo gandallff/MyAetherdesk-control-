@@ -44,7 +44,7 @@ namespace AetherDesk.Agent
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
         private const uint MOUSEEVENTF_RIGHTUP = 0x10;
 
-        // Header & Body Panels
+        // Main Layout Panels
         private Panel pnlHeader;
         private Button btnHamburger;
         private Label lblAppTitle;
@@ -65,6 +65,18 @@ namespace AetherDesk.Agent
         private Panel pageRemoteConnect;
         private Panel pageSecurity;
         private Panel pageSettings;
+
+        // In-App Unified Remote Viewer (Single-Window Experience)
+        private Panel pageActiveSession;
+        private PictureBox picSessionViewport;
+        private Panel pnlSessionTopBar;
+        private Label lblSessionTargetInfo;
+        private Button btnCloseSession;
+        private Button btnSessionCtrlAltDel;
+        private Button btnSessionFullscreen;
+        private Thread inAppStreamThread;
+        private bool isInAppStreaming = false;
+        private string activeConnectedId = "";
 
         // Page 1 Controls
         private Label lblIdText;
@@ -101,14 +113,14 @@ namespace AetherDesk.Agent
             this.mySessionId = GetOrCreateUniqueSessionId();
 
             this.Text = "AetherDesk Enterprise 2026";
-            this.Size = new Size(840, 580);
-            this.MinimumSize = new Size(780, 520);
+            this.Size = new Size(920, 640);
+            this.MinimumSize = new Size(840, 560);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
+            this.FormBorderStyle = FormBorderStyle.Sizable;
             this.BackColor = Color.FromArgb(7, 11, 20);
             this.ForeColor = Color.FromArgb(241, 245, 249);
             this.Font = new Font("Segoe UI", 9.5f);
+            this.DoubleBuffered = true;
 
             BuildAppStructure();
             LoadSettings();
@@ -122,7 +134,7 @@ namespace AetherDesk.Agent
             // 1. TOP MODERN HEADER BAR
             pnlHeader = new Panel();
             pnlHeader.Dock = DockStyle.Top;
-            pnlHeader.Height = 56;
+            pnlHeader.Height = 54;
             pnlHeader.BackColor = Color.FromArgb(15, 23, 42);
             pnlHeader.Padding = new Padding(12, 0, 16, 0);
             this.Controls.Add(pnlHeader);
@@ -134,8 +146,8 @@ namespace AetherDesk.Agent
             btnHamburger.BackColor = Color.FromArgb(30, 41, 59);
             btnHamburger.FlatStyle = FlatStyle.Flat;
             btnHamburger.FlatAppearance.BorderSize = 0;
-            btnHamburger.Size = new Size(38, 38);
-            btnHamburger.Location = new Point(12, 9);
+            btnHamburger.Size = new Size(36, 36);
+            btnHamburger.Location = new Point(10, 9);
             btnHamburger.Cursor = Cursors.Hand;
             btnHamburger.Click += (s, e) => ToggleSidebar();
             pnlHeader.Controls.Add(btnHamburger);
@@ -144,15 +156,15 @@ namespace AetherDesk.Agent
             lblAppTitle.Text = "⚡ AetherDesk Enterprise";
             lblAppTitle.Font = new Font("Segoe UI", 13, FontStyle.Bold);
             lblAppTitle.ForeColor = Color.FromArgb(248, 250, 252);
-            lblAppTitle.Location = new Point(60, 14);
+            lblAppTitle.Location = new Point(56, 13);
             lblAppTitle.AutoSize = true;
             pnlHeader.Controls.Add(lblAppTitle);
 
-            // Right Status Badge
             pnlHeaderStatus = new Panel();
-            pnlHeaderStatus.Location = new Point(560, 12);
-            pnlHeaderStatus.Size = new Size(245, 32);
+            pnlHeaderStatus.Location = new Point(620, 11);
+            pnlHeaderStatus.Size = new Size(260, 32);
             pnlHeaderStatus.BackColor = Color.FromArgb(10, 15, 29);
+            pnlHeaderStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             pnlHeaderStatus.Paint += (s, e) => {
                 using (Pen p = new Pen(Color.FromArgb(16, 185, 129), 1f))
                 {
@@ -182,7 +194,7 @@ namespace AetherDesk.Agent
             this.Controls.Add(pnlBody);
             pnlBody.BringToFront();
 
-            // 3. COLLAPSIBLE LEFT DRAWER (SIDEBAR)
+            // 3. COLLAPSIBLE SIDEBAR
             pnlSidebar = new Panel();
             pnlSidebar.Dock = DockStyle.Left;
             pnlSidebar.Width = 210;
@@ -204,7 +216,7 @@ namespace AetherDesk.Agent
             pnlContent = new Panel();
             pnlContent.Dock = DockStyle.Fill;
             pnlContent.BackColor = Color.FromArgb(7, 11, 20);
-            pnlContent.Padding = new Padding(24);
+            pnlContent.Padding = new Padding(20);
             pnlBody.Controls.Add(pnlContent);
             pnlContent.BringToFront();
 
@@ -212,6 +224,7 @@ namespace AetherDesk.Agent
             BuildPageRemoteConnect();
             BuildPageSecurity();
             BuildPageSettings();
+            BuildPageActiveSession();
 
             ShowPage(pageMyDevice, btnNavMyDevice);
         }
@@ -244,25 +257,36 @@ namespace AetherDesk.Agent
 
         private void ShowPage(Panel targetPage, Button activeBtn)
         {
+            // Stop in-app remote stream if navigating away
+            if (targetPage != pageActiveSession)
+            {
+                isInAppStreaming = false;
+                pnlHeader.Visible = true;
+            }
+
             pageMyDevice.Visible = false;
             pageRemoteConnect.Visible = false;
             pageSecurity.Visible = false;
             pageSettings.Visible = false;
+            pageActiveSession.Visible = false;
 
-            btnNavMyDevice.BackColor = Color.Transparent;
-            btnNavMyDevice.ForeColor = Color.FromArgb(203, 213, 225);
-            btnNavRemoteConnect.BackColor = Color.Transparent;
-            btnNavRemoteConnect.ForeColor = Color.FromArgb(203, 213, 225);
-            btnNavSecurity.BackColor = Color.Transparent;
-            btnNavSecurity.ForeColor = Color.FromArgb(203, 213, 225);
-            btnNavSettings.BackColor = Color.Transparent;
-            btnNavSettings.ForeColor = Color.FromArgb(203, 213, 225);
+            if (activeBtn != null)
+            {
+                btnNavMyDevice.BackColor = Color.Transparent;
+                btnNavMyDevice.ForeColor = Color.FromArgb(203, 213, 225);
+                btnNavRemoteConnect.BackColor = Color.Transparent;
+                btnNavRemoteConnect.ForeColor = Color.FromArgb(203, 213, 225);
+                btnNavSecurity.BackColor = Color.Transparent;
+                btnNavSecurity.ForeColor = Color.FromArgb(203, 213, 225);
+                btnNavSettings.BackColor = Color.Transparent;
+                btnNavSettings.ForeColor = Color.FromArgb(203, 213, 225);
+
+                activeBtn.BackColor = Color.FromArgb(30, 41, 59);
+                activeBtn.ForeColor = Color.FromArgb(56, 189, 248);
+            }
 
             targetPage.Visible = true;
             targetPage.BringToFront();
-
-            activeBtn.BackColor = Color.FromArgb(30, 41, 59);
-            activeBtn.ForeColor = Color.FromArgb(56, 189, 248);
         }
 
         // PAGE 1: Bu Bilgisayarım
@@ -288,10 +312,9 @@ namespace AetherDesk.Agent
             lblSub.AutoSize = true;
             pageMyDevice.Controls.Add(lblSub);
 
-            // Large ID Box
             Panel pnlIdBox = new Panel();
             pnlIdBox.Location = new Point(0, 56);
-            pnlIdBox.Size = new Size(560, 115);
+            pnlIdBox.Size = new Size(620, 115);
             pnlIdBox.BackColor = Color.FromArgb(15, 23, 42);
             pnlIdBox.Paint += (s, e) => {
                 using (Pen p = new Pen(Color.FromArgb(56, 189, 248), 1.5f))
@@ -324,7 +347,7 @@ namespace AetherDesk.Agent
             btnCopyId.BackColor = Color.FromArgb(37, 99, 235);
             btnCopyId.FlatStyle = FlatStyle.Flat;
             btnCopyId.FlatAppearance.BorderSize = 0;
-            btnCopyId.Location = new Point(380, 36);
+            btnCopyId.Location = new Point(440, 36);
             btnCopyId.Size = new Size(160, 42);
             btnCopyId.Cursor = Cursors.Hand;
             btnCopyId.Click += (s, e) => {
@@ -343,13 +366,12 @@ namespace AetherDesk.Agent
             lblIp.AutoSize = true;
             pnlIdBox.Controls.Add(lblIp);
 
-            // Permissions Box
             GroupBox grpPerms = new GroupBox();
             grpPerms.Text = " 🛡️ Bağlantı Yetkileri (İzin Verilen Eylemler) ";
             grpPerms.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             grpPerms.ForeColor = Color.FromArgb(56, 189, 248);
             grpPerms.Location = new Point(0, 185);
-            grpPerms.Size = new Size(560, 130);
+            grpPerms.Size = new Size(620, 130);
             pageMyDevice.Controls.Add(grpPerms);
 
             chkInput = new CheckBox();
@@ -358,7 +380,7 @@ namespace AetherDesk.Agent
             chkInput.Font = new Font("Segoe UI", 9);
             chkInput.ForeColor = Color.FromArgb(241, 245, 249);
             chkInput.Location = new Point(18, 26);
-            chkInput.Size = new Size(500, 24);
+            chkInput.Size = new Size(560, 24);
             chkInput.CheckedChanged += (s, e) => SavePermissions();
             grpPerms.Controls.Add(chkInput);
 
@@ -368,7 +390,7 @@ namespace AetherDesk.Agent
             chkFiles.Font = new Font("Segoe UI", 9);
             chkFiles.ForeColor = Color.FromArgb(241, 245, 249);
             chkFiles.Location = new Point(18, 56);
-            chkFiles.Size = new Size(500, 24);
+            chkFiles.Size = new Size(560, 24);
             chkFiles.CheckedChanged += (s, e) => SavePermissions();
             grpPerms.Controls.Add(chkFiles);
 
@@ -378,11 +400,10 @@ namespace AetherDesk.Agent
             chkClipboard.Font = new Font("Segoe UI", 9);
             chkClipboard.ForeColor = Color.FromArgb(241, 245, 249);
             chkClipboard.Location = new Point(18, 86);
-            chkClipboard.Size = new Size(500, 24);
+            chkClipboard.Size = new Size(560, 24);
             chkClipboard.CheckedChanged += (s, e) => SavePermissions();
             grpPerms.Controls.Add(chkClipboard);
 
-            // Disconnect Button
             btnDisconnect = new Button();
             btnDisconnect.Text = "🚫 Aktif Bağlantıyı Hemen Sonlandır";
             btnDisconnect.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
@@ -391,7 +412,7 @@ namespace AetherDesk.Agent
             btnDisconnect.FlatStyle = FlatStyle.Flat;
             btnDisconnect.FlatAppearance.BorderSize = 0;
             btnDisconnect.Location = new Point(0, 330);
-            btnDisconnect.Size = new Size(560, 38);
+            btnDisconnect.Size = new Size(620, 38);
             btnDisconnect.Cursor = Cursors.Hand;
             btnDisconnect.Click += (s, e) => {
                 MessageBox.Show("Uzak oturum sonlandırıldı.", "AetherDesk Enterprise", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -399,7 +420,7 @@ namespace AetherDesk.Agent
             pageMyDevice.Controls.Add(btnDisconnect);
         }
 
-        // PAGE 2: Uzak Bağlantı (Remote Connect)
+        // PAGE 2: Uzak Bağlantı
         private void BuildPageRemoteConnect()
         {
             pageRemoteConnect = new Panel();
@@ -415,7 +436,7 @@ namespace AetherDesk.Agent
             pageRemoteConnect.Controls.Add(lblH);
 
             Label lblSub = new Label();
-            lblSub.Text = "Karşı bilgisayarın 9 haneli ID'sini girerek doğrudan kontrol penceresini açın.";
+            lblSub.Text = "Karşı bilgisayarın 9 haneli ID'sini girerek bu pencere içinde anında kontrol edin.";
             lblSub.Font = new Font("Segoe UI", 9);
             lblSub.ForeColor = Color.FromArgb(148, 163, 184);
             lblSub.Location = new Point(0, 26);
@@ -424,7 +445,7 @@ namespace AetherDesk.Agent
 
             Panel pnlBox = new Panel();
             pnlBox.Location = new Point(0, 56);
-            pnlBox.Size = new Size(560, 65);
+            pnlBox.Size = new Size(620, 65);
             pnlBox.BackColor = Color.FromArgb(15, 23, 42);
             pageRemoteConnect.Controls.Add(pnlBox);
 
@@ -433,7 +454,7 @@ namespace AetherDesk.Agent
             txtTargetId.BackColor = Color.FromArgb(10, 15, 29);
             txtTargetId.ForeColor = Color.FromArgb(56, 189, 248);
             txtTargetId.Location = new Point(16, 16);
-            txtTargetId.Size = new Size(350, 32);
+            txtTargetId.Size = new Size(400, 32);
             pnlBox.Controls.Add(txtTargetId);
 
             btnConnectTarget = new Button();
@@ -443,14 +464,14 @@ namespace AetherDesk.Agent
             btnConnectTarget.BackColor = Color.FromArgb(37, 99, 235);
             btnConnectTarget.FlatStyle = FlatStyle.Flat;
             btnConnectTarget.FlatAppearance.BorderSize = 0;
-            btnConnectTarget.Location = new Point(380, 14);
-            btnConnectTarget.Size = new Size(165, 36);
+            btnConnectTarget.Location = new Point(430, 14);
+            btnConnectTarget.Size = new Size(170, 36);
             btnConnectTarget.Cursor = Cursors.Hand;
             btnConnectTarget.Click += (s, e) => {
-                string target = txtTargetId.Text.Trim();
+                string target = txtTargetId.Text.Trim().Replace(" ", "");
                 if (!string.IsNullOrEmpty(target))
                 {
-                    LaunchNativeRemoteViewer(target.Replace(" ", ""));
+                    StartInAppSession(target);
                 }
             };
             pnlBox.Controls.Add(btnConnectTarget);
@@ -465,7 +486,7 @@ namespace AetherDesk.Agent
 
             pnlRecentFlow = new FlowLayoutPanel();
             pnlRecentFlow.Location = new Point(0, 170);
-            pnlRecentFlow.Size = new Size(560, 200);
+            pnlRecentFlow.Size = new Size(620, 200);
             pnlRecentFlow.AutoScroll = true;
             pageRemoteConnect.Controls.Add(pnlRecentFlow);
 
@@ -474,25 +495,11 @@ namespace AetherDesk.Agent
             AddRecentCard("891 204 153", "Muhasebe Terminali", "18 ms");
         }
 
-        // DIRECT BUILT-IN NATIVE REMOTE DESKTOP VIEWER WINDOW
-        private void LaunchNativeRemoteViewer(string targetSessionId)
-        {
-            try
-            {
-                RemoteViewerForm viewer = new RemoteViewerForm(targetSessionId);
-                viewer.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Oturum açılamadı: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
         private void AddRecentCard(string id, string name, string ping)
         {
             Panel card = new Panel();
-            card.Size = new Size(175, 90);
-            card.Margin = new Padding(0, 0, 10, 10);
+            card.Size = new Size(185, 90);
+            card.Margin = new Padding(0, 0, 12, 12);
             card.BackColor = Color.FromArgb(15, 23, 42);
             card.Cursor = Cursors.Hand;
 
@@ -522,10 +529,202 @@ namespace AetherDesk.Agent
 
             card.Click += (s, e) => {
                 txtTargetId.Text = id.Replace(" ", "");
-                LaunchNativeRemoteViewer(id.Replace(" ", ""));
+                StartInAppSession(id.Replace(" ", ""));
             };
 
             pnlRecentFlow.Controls.Add(card);
+        }
+
+        // UNIFIED IN-APP REMOTE DESKTOP CANVAS (SINGLE-WINDOW EXPERIENCE)
+        private void BuildPageActiveSession()
+        {
+            pageActiveSession = new Panel();
+            pageActiveSession.Dock = DockStyle.Fill;
+            pageActiveSession.BackColor = Color.Black;
+            pnlContent.Controls.Add(pageActiveSession);
+
+            pnlSessionTopBar = new Panel();
+            pnlSessionTopBar.Dock = DockStyle.Top;
+            pnlSessionTopBar.Height = 44;
+            pnlSessionTopBar.BackColor = Color.FromArgb(15, 23, 42);
+            pnlSessionTopBar.Padding = new Padding(10, 6, 10, 6);
+            pageActiveSession.Controls.Add(pnlSessionTopBar);
+
+            lblSessionTargetInfo = new Label();
+            lblSessionTargetInfo.Text = "⚡ Canlı Oturum: Bağlanıyor...";
+            lblSessionTargetInfo.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblSessionTargetInfo.ForeColor = Color.FromArgb(56, 189, 248);
+            lblSessionTargetInfo.Location = new Point(12, 12);
+            lblSessionTargetInfo.AutoSize = true;
+            pnlSessionTopBar.Controls.Add(lblSessionTargetInfo);
+
+            btnSessionCtrlAltDel = new Button();
+            btnSessionCtrlAltDel.Text = "🛡️ Ctrl+Alt+Del";
+            btnSessionCtrlAltDel.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnSessionCtrlAltDel.ForeColor = Color.White;
+            btnSessionCtrlAltDel.BackColor = Color.FromArgb(30, 41, 59);
+            btnSessionCtrlAltDel.FlatStyle = FlatStyle.Flat;
+            btnSessionCtrlAltDel.FlatAppearance.BorderSize = 0;
+            btnSessionCtrlAltDel.Size = new Size(110, 28);
+            btnSessionCtrlAltDel.Location = new Point(480, 8);
+            btnSessionCtrlAltDel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSessionCtrlAltDel.Cursor = Cursors.Hand;
+            btnSessionCtrlAltDel.Click += (s, e) => SendRemoteKey("CtrlAltDel");
+            pnlSessionTopBar.Controls.Add(btnSessionCtrlAltDel);
+
+            btnCloseSession = new Button();
+            btnCloseSession.Text = "✕ Oturumu Kapat";
+            btnCloseSession.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnCloseSession.ForeColor = Color.White;
+            btnCloseSession.BackColor = Color.FromArgb(225, 29, 72);
+            btnCloseSession.FlatStyle = FlatStyle.Flat;
+            btnCloseSession.FlatAppearance.BorderSize = 0;
+            btnCloseSession.Size = new Size(125, 28);
+            btnCloseSession.Location = new Point(600, 8);
+            btnCloseSession.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnCloseSession.Cursor = Cursors.Hand;
+            btnCloseSession.Click += (s, e) => {
+                isInAppStreaming = false;
+                ShowPage(pageRemoteConnect, btnNavRemoteConnect);
+            };
+            pnlSessionTopBar.Controls.Add(btnCloseSession);
+
+            picSessionViewport = new PictureBox();
+            picSessionViewport.Dock = DockStyle.Fill;
+            picSessionViewport.SizeMode = PictureBoxSizeMode.Zoom;
+            picSessionViewport.BackColor = Color.Black;
+            picSessionViewport.Cursor = Cursors.Cross;
+            pageActiveSession.Controls.Add(picSessionViewport);
+            picSessionViewport.BringToFront();
+
+            // Pixel-Perfect Mouse Normalization & Click Forwarding
+            picSessionViewport.MouseClick += (s, e) => {
+                Point norm = TranslateZoomCoordinates(picSessionViewport, e.Location);
+                if (!norm.IsEmpty)
+                {
+                    string action = e.Button == MouseButtons.Right ? "rightclick" : "click";
+                    SendRemoteMouse(norm.X, norm.Y, 1920, 1080, action);
+                }
+            };
+
+            picSessionViewport.MouseDoubleClick += (s, e) => {
+                Point norm = TranslateZoomCoordinates(picSessionViewport, e.Location);
+                if (!norm.IsEmpty)
+                {
+                    SendRemoteMouse(norm.X, norm.Y, 1920, 1080, "dblclick");
+                }
+            };
+
+            this.KeyPreview = true;
+            this.KeyDown += (s, e) => {
+                if (isInAppStreaming)
+                {
+                    SendRemoteKey(e.KeyCode.ToString());
+                }
+            };
+        }
+
+        private void StartInAppSession(string targetId)
+        {
+            this.activeConnectedId = targetId;
+            lblSessionTargetInfo.Text = "⚡ Canlı Oturum: " + targetId + " (Doğrudan Masaüstü)";
+            ShowPage(pageActiveSession, null);
+            isInAppStreaming = true;
+
+            inAppStreamThread = new Thread(() =>
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                while (isInAppStreaming)
+                {
+                    try
+                    {
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/screen/" + targetId);
+                        req.Method = "GET";
+                        req.Timeout = 2000;
+
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                        using (Stream s = resp.GetResponseStream())
+                        using (MemoryStream ms = new MemoryStream())
+                        {
+                            s.CopyTo(ms);
+                            byte[] imgBytes = ms.ToArray();
+                            if (imgBytes.Length > 0)
+                            {
+                                using (MemoryStream mem = new MemoryStream(imgBytes))
+                                {
+                                    Image img = Image.FromStream(mem);
+                                    if (picSessionViewport.IsHandleCreated)
+                                    {
+                                        picSessionViewport.Invoke(new Action(() => {
+                                            Image old = picSessionViewport.Image;
+                                            picSessionViewport.Image = new Bitmap(img);
+                                            if (old != null) old.Dispose();
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    Thread.Sleep(150); // Fast 7 FPS smooth live canvas
+                }
+            });
+            inAppStreamThread.IsBackground = true;
+            inAppStreamThread.Start();
+        }
+
+        private Point TranslateZoomCoordinates(PictureBox pic, Point p)
+        {
+            if (pic.Image == null) return p;
+            float imgAspect = (float)pic.Image.Width / pic.Image.Height;
+            float boxAspect = (float)pic.Width / pic.Height;
+            float scale = (boxAspect > imgAspect) ? (float)pic.Height / pic.Image.Height : (float)pic.Width / pic.Image.Width;
+            float renderW = pic.Image.Width * scale;
+            float renderH = pic.Image.Height * scale;
+            float offsetX = (pic.Width - renderW) / 2f;
+            float offsetY = (pic.Height - renderH) / 2f;
+
+            float normX = (p.X - offsetX) / renderW;
+            float normY = (p.Y - offsetY) / renderH;
+
+            if (normX < 0 || normX > 1 || normY < 0 || normY > 1) return Point.Empty;
+
+            return new Point((int)(normX * 1920), (int)(normY * 1080));
+        }
+
+        private void SendRemoteMouse(int x, int y, int sw, int sh, string action)
+        {
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string url = string.Format("{0}/api/mouse/{1}?x={2}&y={3}&sw={4}&sh={5}&action={6}",
+                        CLOUD_RELAY_URL, activeConnectedId, x, y, sw, sh, action);
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = "GET";
+                    req.Timeout = 1500;
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                }
+                catch { }
+            });
+        }
+
+        private void SendRemoteKey(string key)
+        {
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string url = string.Format("{0}/api/keyboard/{1}?key={2}",
+                        CLOUD_RELAY_URL, activeConnectedId, Uri.EscapeDataString(key));
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = "GET";
+                    req.Timeout = 1500;
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                }
+                catch { }
+            });
         }
 
         // PAGE 3: Güvenlik & Yetki
@@ -548,7 +747,7 @@ namespace AetherDesk.Agent
             grpM.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             grpM.ForeColor = Color.FromArgb(56, 189, 248);
             grpM.Location = new Point(0, 45);
-            grpM.Size = new Size(560, 200);
+            grpM.Size = new Size(620, 200);
             pageSecurity.Controls.Add(grpM);
 
             rbUnattended = new RadioButton();
@@ -556,7 +755,7 @@ namespace AetherDesk.Agent
             rbUnattended.Font = new Font("Segoe UI", 9);
             rbUnattended.ForeColor = Color.FromArgb(241, 245, 249);
             rbUnattended.Location = new Point(20, 28);
-            rbUnattended.Size = new Size(500, 24);
+            rbUnattended.Size = new Size(560, 24);
             grpM.Controls.Add(rbUnattended);
 
             rbPassword = new RadioButton();
@@ -564,7 +763,7 @@ namespace AetherDesk.Agent
             rbPassword.Font = new Font("Segoe UI", 9);
             rbPassword.ForeColor = Color.FromArgb(241, 245, 249);
             rbPassword.Location = new Point(20, 58);
-            rbPassword.Size = new Size(500, 24);
+            rbPassword.Size = new Size(560, 24);
             grpM.Controls.Add(rbPassword);
 
             txtCustomPassword = new TextBox();
@@ -580,7 +779,7 @@ namespace AetherDesk.Agent
             rbPrompt.Font = new Font("Segoe UI", 9);
             rbPrompt.ForeColor = Color.FromArgb(241, 245, 249);
             rbPrompt.Location = new Point(20, 126);
-            rbPrompt.Size = new Size(500, 24);
+            rbPrompt.Size = new Size(560, 24);
             grpM.Controls.Add(rbPrompt);
 
             btnSaveSecurity = new Button();
@@ -591,7 +790,7 @@ namespace AetherDesk.Agent
             btnSaveSecurity.FlatStyle = FlatStyle.Flat;
             btnSaveSecurity.FlatAppearance.BorderSize = 0;
             btnSaveSecurity.Location = new Point(0, 265);
-            btnSaveSecurity.Size = new Size(560, 42);
+            btnSaveSecurity.Size = new Size(620, 42);
             btnSaveSecurity.Cursor = Cursors.Hand;
             btnSaveSecurity.Click += (s, e) => SaveSecurity();
             pageSecurity.Controls.Add(btnSaveSecurity);
@@ -614,7 +813,7 @@ namespace AetherDesk.Agent
 
             Panel pnlBox = new Panel();
             pnlBox.Location = new Point(0, 45);
-            pnlBox.Size = new Size(560, 260);
+            pnlBox.Size = new Size(620, 260);
             pnlBox.BackColor = Color.FromArgb(15, 23, 42);
             pnlBox.Padding = new Padding(20);
             pageSettings.Controls.Add(pnlBox);
@@ -1008,180 +1207,6 @@ namespace AetherDesk.Agent
             {
                 return "192.168.1.100";
             }
-        }
-    }
-
-    // BUILT-IN NATIVE REMOTE DESKTOP VIEWER FORM (LIKE ANYDESK NATIVE WINDOW)
-    public class RemoteViewerForm : Form
-    {
-        private string targetId;
-        private PictureBox picViewport;
-        private Panel pnlTopBar;
-        private Label lblSessionInfo;
-        private Button btnDisconnect;
-        private Button btnCtrlAltDel;
-        private Thread streamThread;
-        private bool isStreaming = true;
-
-        public RemoteViewerForm(string targetSessionId)
-        {
-            this.targetId = targetSessionId;
-            this.Text = "AetherDesk Canlı Uzak Oturum — ID: " + targetSessionId;
-            this.Size = new Size(1100, 720);
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = Color.Black;
-            this.DoubleBuffered = true;
-
-            pnlTopBar = new Panel();
-            pnlTopBar.Dock = DockStyle.Top;
-            pnlTopBar.Height = 44;
-            pnlTopBar.BackColor = Color.FromArgb(15, 23, 42);
-            pnlTopBar.Padding = new Padding(12, 6, 12, 6);
-            this.Controls.Add(pnlTopBar);
-
-            lblSessionInfo = new Label();
-            lblSessionInfo.Text = "⚡ Canlı Oturum: " + targetSessionId + "  (Doğrudan Masaüstü)";
-            lblSessionInfo.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-            lblSessionInfo.ForeColor = Color.FromArgb(56, 189, 248);
-            lblSessionInfo.Location = new Point(14, 12);
-            lblSessionInfo.AutoSize = true;
-            pnlTopBar.Controls.Add(lblSessionInfo);
-
-            btnCtrlAltDel = new Button();
-            btnCtrlAltDel.Text = "🛡️ Ctrl+Alt+Del";
-            btnCtrlAltDel.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-            btnCtrlAltDel.ForeColor = Color.White;
-            btnCtrlAltDel.BackColor = Color.FromArgb(30, 41, 59);
-            btnCtrlAltDel.FlatStyle = FlatStyle.Flat;
-            btnCtrlAltDel.FlatAppearance.BorderSize = 0;
-            btnCtrlAltDel.Size = new Size(115, 30);
-            btnCtrlAltDel.Location = new Point(810, 7);
-            btnCtrlAltDel.Cursor = Cursors.Hand;
-            btnCtrlAltDel.Click += (s, e) => SendRemoteKey("CtrlAltDel");
-            pnlTopBar.Controls.Add(btnCtrlAltDel);
-
-            btnDisconnect = new Button();
-            btnDisconnect.Text = "✕ Oturumu Kapat";
-            btnDisconnect.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-            btnDisconnect.ForeColor = Color.White;
-            btnDisconnect.BackColor = Color.FromArgb(225, 29, 72);
-            btnDisconnect.FlatStyle = FlatStyle.Flat;
-            btnDisconnect.FlatAppearance.BorderSize = 0;
-            btnDisconnect.Size = new Size(130, 30);
-            btnDisconnect.Location = new Point(935, 7);
-            btnDisconnect.Cursor = Cursors.Hand;
-            btnDisconnect.Click += (s, e) => { isStreaming = false; this.Close(); };
-            pnlTopBar.Controls.Add(btnDisconnect);
-
-            picViewport = new PictureBox();
-            picViewport.Dock = DockStyle.Fill;
-            picViewport.SizeMode = PictureBoxSizeMode.Zoom;
-            picViewport.BackColor = Color.Black;
-            picViewport.Cursor = Cursors.Cross;
-            this.Controls.Add(picViewport);
-            picViewport.BringToFront();
-
-            // Native Mouse Event Interceptors
-            picViewport.MouseClick += (s, e) => {
-                string action = e.Button == MouseButtons.Right ? "rightclick" : "click";
-                SendRemoteMouse(e.X, e.Y, picViewport.Width, picViewport.Height, action);
-            };
-            picViewport.MouseDoubleClick += (s, e) => {
-                SendRemoteMouse(e.X, e.Y, picViewport.Width, picViewport.Height, "dblclick");
-            };
-
-            // Native Keyboard Listener
-            this.KeyPreview = true;
-            this.KeyDown += (s, e) => {
-                SendRemoteKey(e.KeyCode.ToString());
-            };
-
-            StartStreamLoop();
-        }
-
-        private void StartStreamLoop()
-        {
-            streamThread = new Thread(() =>
-            {
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                while (isStreaming)
-                {
-                    try
-                    {
-                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(AetherDeskAppForm.CLOUD_RELAY_URL + "/api/screen/" + targetId);
-                        req.Method = "GET";
-                        req.Timeout = 2000;
-
-                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                        using (Stream s = resp.GetResponseStream())
-                        using (MemoryStream ms = new MemoryStream())
-                        {
-                            s.CopyTo(ms);
-                            byte[] imgBytes = ms.ToArray();
-                            if (imgBytes.Length > 0)
-                            {
-                                using (MemoryStream mem = new MemoryStream(imgBytes))
-                                {
-                                    Image img = Image.FromStream(mem);
-                                    if (picViewport.IsHandleCreated)
-                                    {
-                                        picViewport.Invoke(new Action(() => {
-                                            Image old = picViewport.Image;
-                                            picViewport.Image = new Bitmap(img);
-                                            if (old != null) old.Dispose();
-                                        }));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    Thread.Sleep(200); // 5 FPS smooth native stream loop
-                }
-            });
-            streamThread.IsBackground = true;
-            streamThread.Start();
-        }
-
-        private void SendRemoteMouse(int x, int y, int sw, int sh, string action)
-        {
-            ThreadPool.QueueUserWorkItem((state) =>
-            {
-                try
-                {
-                    string url = string.Format("{0}/api/mouse/{1}?x={2}&y={3}&sw={4}&sh={5}&action={6}",
-                        AetherDeskAppForm.CLOUD_RELAY_URL, targetId, x, y, sw, sh, action);
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-                    req.Method = "GET";
-                    req.Timeout = 1500;
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
-                }
-                catch { }
-            });
-        }
-
-        private void SendRemoteKey(string key)
-        {
-            ThreadPool.QueueUserWorkItem((state) =>
-            {
-                try
-                {
-                    string url = string.Format("{0}/api/keyboard/{1}?key={2}",
-                        AetherDeskAppForm.CLOUD_RELAY_URL, targetId, Uri.EscapeDataString(key));
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-                    req.Method = "GET";
-                    req.Timeout = 1500;
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
-                }
-                catch { }
-            });
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            isStreaming = false;
-            base.OnFormClosing(e);
         }
     }
 }
