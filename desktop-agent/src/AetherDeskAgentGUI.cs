@@ -320,7 +320,7 @@ namespace AetherDesk.Agent
                 string target = txtRemoteTargetId.Text.Trim();
                 if (!string.IsNullOrEmpty(target))
                 {
-                    System.Diagnostics.Process.Start("https://my-aetherdesk-control.vercel.app");
+                    System.Diagnostics.Process.Start("https://my-aetherdesk-control.vercel.app/?connect=" + target.Replace(" ", ""));
                 }
             };
             panelOutgoing.Controls.Add(btnConnectRemote);

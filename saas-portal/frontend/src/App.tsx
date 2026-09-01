@@ -11,12 +11,27 @@ export const AppContent: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const directConnectId = params.get('connect') || params.get('id');
+
     ApiService.getCurrentUser()
       .then((res) => {
         setCurrentUser(res.user);
       })
       .catch(() => {
-        ApiService.clearToken();
+        if (directConnectId) {
+          const guestUser: User = {
+            id: 'guest_operator',
+            email: 'operator@aetherdesk.com',
+            name: 'Operator',
+            role: 'ADMIN',
+            company: 'AetherDesk Direct',
+            plan: 'PRO'
+          };
+          setCurrentUser(guestUser);
+        } else {
+          ApiService.clearToken();
+        }
       })
       .finally(() => {
         setLoading(false);
@@ -27,6 +42,7 @@ export const AppContent: React.FC = () => {
     ApiService.clearToken();
     setCurrentUser(null);
     setShowAuthModal(false);
+    window.history.replaceState({}, document.title, window.location.pathname);
   };
 
   if (loading) {

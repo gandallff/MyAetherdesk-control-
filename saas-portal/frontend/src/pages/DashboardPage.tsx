@@ -55,6 +55,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
 
   useEffect(() => {
     fetchDevices();
+
+    // Check for direct connection query param ?connect=778375604 or ?id=778375604
+    const params = new URLSearchParams(window.location.search);
+    const directId = params.get('connect') || params.get('id');
+    if (directId) {
+      const clean = directId.replace(/[\s\-]/g, '');
+      const autoDevice: Device = {
+        id: `auto_${clean}`,
+        user_id: user.id,
+        name: `Uzak Cihaz (${clean})`,
+        session_id: clean,
+        is_online: 1,
+        direct_ip: 'WebRTC Cloud Relay',
+        direct_port: 8443,
+        last_seen: new Date().toISOString()
+      };
+      setActiveRemoteDevice(autoDevice);
+    }
   }, []);
 
   const openAddModal = () => {
