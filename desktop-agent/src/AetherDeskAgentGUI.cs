@@ -24,15 +24,11 @@ namespace AetherDesk.Agent
 
     public class AgentMainForm : Form
     {
-        // Win32 APIs for Real Mouse & Keyboard Input Emulation
         [DllImport("user32.dll")]
         static extern bool SetCursorPos(int X, int Y);
 
         [DllImport("user32.dll")]
         static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
-
-        [DllImport("user32.dll")]
-        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
 
         private const uint MOUSEEVENTF_LEFTDOWN = 0x02;
         private const uint MOUSEEVENTF_LEFTUP = 0x04;
@@ -59,7 +55,11 @@ namespace AetherDesk.Agent
         private string mySessionId;
         private HttpListener listener;
         private Thread listenThread;
-        private bool isStreaming = false;
+        private Thread cloudRelayThread;
+        private bool isRunning = true;
+
+        // Configurable Cloud Relay URL (Render / Public Cloud)
+        public static string CLOUD_RELAY_URL = "https://myaetherdesk-signaling.onrender.com";
 
         public AgentMainForm()
         {
@@ -83,7 +83,7 @@ namespace AetherDesk.Agent
             this.Controls.Add(lblTitle);
 
             lblSub = new Label();
-            lblSub.Text = "Gercek fiziksel ekran yakalama ve tam uzaktan kontrol aktif.";
+            lblSub.Text = "Bulut ve Yerel Ag Gercek Fiziksel Masaustu Yayini Aktif.";
             lblSub.Font = new Font("Segoe UI", 9);
             lblSub.ForeColor = Color.FromArgb(148, 163, 184);
             lblSub.Location = new Point(30, 52);
@@ -104,15 +104,15 @@ namespace AetherDesk.Agent
             panelCard.Controls.Add(statusDot);
 
             lblStatus = new Label();
-            lblStatus.Text = "GERCEK EKRAN YAYINI HAZIR (ONLINE)";
+            lblStatus.Text = "BULUT VE YEREL YAYIN HAZIR (ONLINE)";
             lblStatus.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
             lblStatus.Location = new Point(38, 14);
-            lblStatus.Size = new Size(250, 18);
+            lblStatus.Size = new Size(270, 18);
             panelCard.Controls.Add(lblStatus);
 
             lblIdTag = new Label();
-            lblIdTag.Text = "BU BILGISAYARIN OTURUM ID'SI:";
+            lblIdTag.Text = "BU BILGISAYARIN 9 HANELI OTURUM ID'SI:";
             lblIdTag.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblIdTag.ForeColor = Color.FromArgb(148, 163, 184);
             lblIdTag.Location = new Point(20, 42);
@@ -145,7 +145,7 @@ namespace AetherDesk.Agent
 
             string localIp = GetLocalIp();
             lblIpInfo = new Label();
-            lblIpInfo.Text = "Yerel IP (LAN): " + localIp + ":8443";
+            lblIpInfo.Text = "Yerel IP (LAN): " + localIp + ":8443 | Bulut: Aktif";
             lblIpInfo.Font = new Font("Consolas", 9);
             lblIpInfo.ForeColor = Color.FromArgb(148, 163, 184);
             lblIpInfo.Location = new Point(20, 115);
@@ -206,7 +206,7 @@ namespace AetherDesk.Agent
             grpAccessSettings.Controls.Add(btnSaveSettings);
 
             Label lblFooter = new Label();
-            lblFooter.Text = "Bu program calistigi surece portaldan tek tikla bu bilgisayarin gercek masaustu kontrol edilebilir.";
+            lblFooter.Text = "Bu 9 haneli ID'yi yoneticiye iletiniz. Dunyanin her yerinden gercek ekran kontrolu saglanacaktir.";
             lblFooter.Font = new Font("Segoe UI", 8.5f);
             lblFooter.ForeColor = Color.FromArgb(100, 116, 139);
             lblFooter.Location = new Point(30, 465);
@@ -215,6 +215,7 @@ namespace AetherDesk.Agent
 
             LoadSavedAccessSettings();
             StartListener();
+            StartCloudRelayThread();
         }
 
         private void LoadSavedAccessSettings()
@@ -292,17 +293,16 @@ namespace AetherDesk.Agent
                 try
                 {
                     HttpListenerContext ctx = listener.GetContext();
-                    ThreadPool.QueueUserWorkItem((state) => HandleRequest(ctx));
+                    ThreadPool.QueueUserWorkItem((state) => HandleLocalRequest(ctx));
                 }
                 catch { }
             }
         }
 
-        private void HandleRequest(HttpListenerContext ctx)
+        private void HandleLocalRequest(HttpListenerContext ctx)
         {
             try
             {
-                // Enable CORS
                 ctx.Response.AddHeader("Access-Control-Allow-Origin", "*");
                 ctx.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
                 ctx.Response.AddHeader("Access-Control-Allow-Headers", "*");
@@ -316,7 +316,6 @@ namespace AetherDesk.Agent
 
                 string path = ctx.Request.Url.AbsolutePath.ToLower();
 
-                // 1. Live Screen MJPEG / JPEG Stream
                 if (path == "/screen" || path == "/screenshot")
                 {
                     byte[] jpegBytes = CaptureRealScreenJpeg();
@@ -324,47 +323,12 @@ namespace AetherDesk.Agent
                     ctx.Response.ContentLength64 = jpegBytes.Length;
                     ctx.Response.OutputStream.Write(jpegBytes, 0, jpegBytes.Length);
                     ctx.Response.Close();
-
-                    this.Invoke((MethodInvoker)delegate {
-                        statusDot.BackColor = Color.FromArgb(96, 165, 250);
-                        lblStatus.Text = "GERCEK EKRAN YAYINI AKTIF";
-                        lblStatus.ForeColor = Color.FromArgb(96, 165, 250);
-                    });
                     return;
                 }
 
-                // 2. Real Mouse Control (Clicks & Movements)
                 if (path == "/mouse")
                 {
-                    string xStr = ctx.Request.QueryString["x"];
-                    string yStr = ctx.Request.QueryString["y"];
-                    string act = ctx.Request.QueryString["action"] ?? "move";
-
-                    if (!string.IsNullOrEmpty(xStr) && !string.IsNullOrEmpty(yStr))
-                    {
-                        int targetX = int.Parse(xStr);
-                        int targetY = int.Parse(yStr);
-
-                        // Scale from browser coordinates to physical screen resolution
-                        Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
-                        int screenW = int.Parse(ctx.Request.QueryString["sw"] ?? screenBounds.Width.ToString());
-                        int screenH = int.Parse(ctx.Request.QueryString["sh"] ?? screenBounds.Height.ToString());
-
-                        int realX = (int)((double)targetX / screenW * screenBounds.Width);
-                        int realY = (int)((double)targetY / screenH * screenBounds.Height);
-
-                        SetCursorPos(realX, realY);
-
-                        if (act == "click")
-                        {
-                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
-                        }
-                        else if (act == "rightclick")
-                        {
-                            mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, (uint)realX, (uint)realY, 0, 0);
-                        }
-                    }
-
+                    ExecuteMouseEvent(ctx.Request.QueryString["x"], ctx.Request.QueryString["y"], ctx.Request.QueryString["sw"], ctx.Request.QueryString["sh"], ctx.Request.QueryString["action"]);
                     byte[] okBuf = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
                     ctx.Response.ContentType = "application/json";
                     ctx.Response.OutputStream.Write(okBuf, 0, okBuf.Length);
@@ -372,8 +336,7 @@ namespace AetherDesk.Agent
                     return;
                 }
 
-                // 3. Handshake Status Endpoint
-                byte[] buf = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"connected\",\"session\":\"" + this.mySessionId + "\",\"width\":" + Screen.PrimaryScreen.Bounds.Width + ",\"height\":" + Screen.PrimaryScreen.Bounds.Height + "}");
+                byte[] buf = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"connected\",\"session\":\"" + this.mySessionId + "\"}");
                 ctx.Response.ContentType = "application/json";
                 ctx.Response.OutputStream.Write(buf, 0, buf.Length);
                 ctx.Response.Close();
@@ -381,7 +344,88 @@ namespace AetherDesk.Agent
             catch { }
         }
 
-        // Real Windows Physical Desktop Screen Capture
+        // Background Cloud Relay (Pushes Screen to Render & Polls for Remote Mouse Commands)
+        private void StartCloudRelayThread()
+        {
+            cloudRelayThread = new Thread(() =>
+            {
+                string cleanId = this.mySessionId.Replace(" ", "");
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+                while (isRunning)
+                {
+                    try
+                    {
+                        // 1. Push Latest Screen Frame to Render Cloud
+                        byte[] screenJpeg = CaptureRealScreenJpeg();
+                        HttpWebRequest uploadReq = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/stream/" + cleanId);
+                        uploadReq.Method = "POST";
+                        uploadReq.ContentType = "image/jpeg";
+                        uploadReq.ContentLength = screenJpeg.Length;
+                        uploadReq.Timeout = 3000;
+
+                        using (Stream reqStream = uploadReq.GetRequestStream())
+                        {
+                            reqStream.Write(screenJpeg, 0, screenJpeg.Length);
+                        }
+                        using (HttpWebResponse resp = (HttpWebResponse)uploadReq.GetResponse()) { }
+
+                        // 2. Poll Mouse Actions from Cloud Queue
+                        HttpWebRequest eventReq = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/events/" + cleanId);
+                        eventReq.Method = "GET";
+                        eventReq.Timeout = 3000;
+
+                        using (HttpWebResponse eventResp = (HttpWebResponse)eventReq.GetResponse())
+                        using (StreamReader reader = new StreamReader(eventResp.GetResponseStream()))
+                        {
+                            string json = reader.ReadToEnd();
+                            // Parse simple events if present
+                            if (json.Contains("\"action\":\"click\""))
+                            {
+                                // Execute remote click on real desktop
+                                Point current = Cursor.Position;
+                                mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)current.X, (uint)current.Y, 0, 0);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Offline or waiting for cloud connection
+                    }
+
+                    Thread.Sleep(500); // 2 FPS cloud upload loop
+                }
+            });
+            cloudRelayThread.IsBackground = true;
+            cloudRelayThread.Start();
+        }
+
+        private void ExecuteMouseEvent(string xStr, string yStr, string swStr, string shStr, string act)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(xStr) && !string.IsNullOrEmpty(yStr))
+                {
+                    int targetX = int.Parse(xStr);
+                    int targetY = int.Parse(yStr);
+                    Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+                    int screenW = int.Parse(swStr ?? screenBounds.Width.ToString());
+                    int screenH = int.Parse(shStr ?? screenBounds.Height.ToString());
+
+                    int realX = (int)((double)targetX / screenW * screenBounds.Width);
+                    int realY = (int)((double)targetY / screenH * screenBounds.Height);
+
+                    SetCursorPos(realX, realY);
+
+                    if (act == "click")
+                    {
+                        mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                    }
+                }
+            }
+            catch { }
+        }
+
         private byte[] CaptureRealScreenJpeg()
         {
             Rectangle bounds = Screen.PrimaryScreen.Bounds;
@@ -389,10 +433,7 @@ namespace AetherDesk.Agent
             {
                 using (Graphics g = Graphics.FromImage(bitmap))
                 {
-                    // Copy real screen pixels from GPU / Display buffer
                     g.CopyFromScreen(0, 0, 0, 0, bounds.Size, CopyPixelOperation.SourceCopy);
-                    
-                    // Draw mouse cursor on real position
                     Point cursorPoint = Cursor.Position;
                     Cursors.Default.Draw(g, new Rectangle(cursorPoint.X, cursorPoint.Y, 32, 32));
                 }
@@ -401,8 +442,7 @@ namespace AetherDesk.Agent
                 {
                     ImageCodecInfo jpgEncoder = GetEncoder(ImageFormat.Jpeg);
                     EncoderParameters myEncoderParameters = new EncoderParameters(1);
-                    // Fast JPEG compression for low latency
-                    myEncoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 65L);
+                    myEncoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 60L);
                     bitmap.Save(ms, jpgEncoder, myEncoderParameters);
                     return ms.ToArray();
                 }

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: myaetherdesk-signaling
+    env: node
+    rootDir: signaling-server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
