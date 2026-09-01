@@ -44,31 +44,24 @@ namespace AetherDesk.Agent
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
         private const uint MOUSEEVENTF_RIGHTUP = 0x10;
 
-        // Main Layout Panels
-        private Panel pnlHeader;
-        private Button btnHamburger;
-        private Label lblAppTitle;
-        private Panel pnlHeaderStatus;
-        private Label lblHeaderStatusText;
-        private Panel pnlBody;
-        private Panel pnlSidebar;
-        private Panel pnlContent;
+        // Colors matching Images 2 & 3
+        private Color clrBg = Color.FromArgb(13, 15, 18);
+        private Color clrCardBg = Color.FromArgb(21, 24, 30);
+        private Color clrInnerBox = Color.FromArgb(10, 12, 15);
+        private Color clrBorder = Color.FromArgb(38, 42, 52);
+        private Color clrAccentRed = Color.FromArgb(224, 49, 49);
+        private Color clrAccentRedHover = Color.FromArgb(239, 68, 68);
+        private Color clrText = Color.FromArgb(248, 250, 252);
+        private Color clrMuted = Color.FromArgb(148, 163, 184);
 
-        // Navigation Buttons
-        private Button btnNavMyDevice;
-        private Button btnNavRemoteConnect;
-        private Button btnNavActiveSession;
-        private Button btnNavSecurity;
-        private Button btnNavSettings;
+        // Main Layout
+        private Panel pnlMainWrapper;
+        private Panel pnlCenterCard;
+        private Panel pnlRightMenu;
+        private bool isMenuOpen = false;
 
-        // Content Pages
-        private Panel pageMyDevice;
-        private Panel pageRemoteConnect;
-        private Panel pageSecurity;
-        private Panel pageSettings;
-
-        // In-App Unified Remote Viewer
-        private Panel pageActiveSession;
+        // In-App Session Page
+        private Panel pnlActiveSession;
         private PictureBox picSessionViewport;
         private Panel pnlSessionTopBar;
         private Label lblSessionTargetInfo;
@@ -76,32 +69,26 @@ namespace AetherDesk.Agent
         private Button btnCloseSession;
         private Button btnSessionCtrlAltDel;
         private Button btnSessionSendFile;
-        private Button btnSessionFullscreen;
         private Thread inAppStreamThread;
         private bool isInAppStreaming = false;
         private string activeConnectedId = "";
         private DateTime sessionStartTime;
         private System.Windows.Forms.Timer sessionTimer;
 
-        // Page 1 Controls
+        // Card Controls
         private Label lblIdText;
         private Button btnCopyId;
-        private CheckBox chkInput;
-        private CheckBox chkFiles;
-        private CheckBox chkClipboard;
-        private Button btnDisconnect;
-
-        // Page 2 Controls
         private TextBox txtTargetId;
-        private Button btnConnectTarget;
-        private FlowLayoutPanel pnlRecentFlow;
+        private Button btnConnect;
+        private Button btnWebPortal;
+        private Label lblOnlineStatus;
 
-        // Page 3 Controls
-        private RadioButton rbUnattended;
-        private RadioButton rbPassword;
-        private RadioButton rbPrompt;
-        private TextBox txtCustomPassword;
-        private Button btnSaveSecurity;
+        // Permissions & Security State
+        private bool allowInput = true;
+        private bool allowFiles = true;
+        private bool allowClip = true;
+        private string accessMode = "UNATTENDED";
+        private string accessPassword = "aether2026";
 
         private string mySessionId;
         private HttpListener listener;
@@ -109,7 +96,6 @@ namespace AetherDesk.Agent
         private Thread cloudRelayThread;
         private Thread inputPollThread;
         private bool isRunning = true;
-        private bool isSidebarOpen = true;
 
         public static string CLOUD_RELAY_URL = "https://myaetherdesk-control.onrender.com";
 
@@ -117,13 +103,12 @@ namespace AetherDesk.Agent
         {
             this.mySessionId = GetOrCreateUniqueSessionId();
 
-            this.Text = "AetherDesk Enterprise 2026";
-            this.Size = new Size(960, 680);
-            this.MinimumSize = new Size(860, 580);
+            this.Text = "AetherDesk Remote Control - Premium Remote Desktop";
+            this.Size = new Size(980, 720);
+            this.MinimumSize = new Size(880, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.BackColor = Color.FromArgb(7, 11, 20);
-            this.ForeColor = Color.FromArgb(241, 245, 249);
+            this.BackColor = clrBg;
+            this.ForeColor = clrText;
             this.Font = new Font("Segoe UI", 9.5f);
             this.DoubleBuffered = true;
 
@@ -131,138 +116,360 @@ namespace AetherDesk.Agent
             sessionTimer.Interval = 1000;
             sessionTimer.Tick += (s, e) => UpdateSessionTimer();
 
-            BuildAppStructure();
+            BuildModernLayout();
             LoadSettings();
             StartListener();
             StartCloudRelayThread();
             StartInputPollThread();
         }
 
-        private void BuildAppStructure()
+        private void BuildModernLayout()
         {
-            // 1. TOP MODERN HEADER BAR
-            pnlHeader = new Panel();
-            pnlHeader.Dock = DockStyle.Top;
-            pnlHeader.Height = 54;
-            pnlHeader.BackColor = Color.FromArgb(15, 23, 42);
-            pnlHeader.Padding = new Padding(12, 0, 16, 0);
-            this.Controls.Add(pnlHeader);
+            // 1. Full-Window Background Wrapper
+            pnlMainWrapper = new Panel();
+            pnlMainWrapper.Dock = DockStyle.Fill;
+            pnlMainWrapper.BackColor = clrBg;
+            this.Controls.Add(pnlMainWrapper);
 
-            btnHamburger = new Button();
-            btnHamburger.Text = "☰";
-            btnHamburger.Font = new Font("Segoe UI", 13, FontStyle.Bold);
-            btnHamburger.ForeColor = Color.FromArgb(56, 189, 248);
-            btnHamburger.BackColor = Color.FromArgb(30, 41, 59);
-            btnHamburger.FlatStyle = FlatStyle.Flat;
-            btnHamburger.FlatAppearance.BorderSize = 0;
-            btnHamburger.Size = new Size(36, 36);
-            btnHamburger.Location = new Point(10, 9);
-            btnHamburger.Cursor = Cursors.Hand;
-            btnHamburger.Click += (s, e) => ToggleSidebar();
-            pnlHeader.Controls.Add(btnHamburger);
+            // 2. Right-Hand Slide-Out Drawer Menu (Image 3)
+            pnlRightMenu = new Panel();
+            pnlRightMenu.Dock = DockStyle.Right;
+            pnlRightMenu.Width = 280;
+            pnlRightMenu.BackColor = Color.FromArgb(17, 20, 25);
+            pnlRightMenu.Padding = new Padding(16, 20, 16, 20);
+            pnlRightMenu.Visible = false;
+            this.Controls.Add(pnlRightMenu);
 
-            lblAppTitle = new Label();
-            lblAppTitle.Text = "⚡ AetherDesk Enterprise";
-            lblAppTitle.Font = new Font("Segoe UI", 13, FontStyle.Bold);
-            lblAppTitle.ForeColor = Color.FromArgb(248, 250, 252);
-            lblAppTitle.Location = new Point(56, 13);
-            lblAppTitle.AutoSize = true;
-            pnlHeader.Controls.Add(lblAppTitle);
+            BuildRightDrawerMenu();
 
-            pnlHeaderStatus = new Panel();
-            pnlHeaderStatus.Location = new Point(660, 11);
-            pnlHeaderStatus.Size = new Size(260, 32);
-            pnlHeaderStatus.BackColor = Color.FromArgb(10, 15, 29);
-            pnlHeaderStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            pnlHeaderStatus.Paint += (s, e) => {
-                using (Pen p = new Pen(Color.FromArgb(16, 185, 129), 1f))
+            // 3. Centered Floating Modern Card (Image 2)
+            pnlCenterCard = new Panel();
+            pnlCenterCard.Size = new Size(540, 580);
+            pnlCenterCard.BackColor = clrCardBg;
+            pnlCenterCard.Anchor = AnchorStyles.None;
+            pnlCenterCard.Location = new Point((pnlMainWrapper.Width - pnlCenterCard.Width) / 2, (pnlMainWrapper.Height - pnlCenterCard.Height) / 2);
+            pnlCenterCard.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1.5f))
                 {
-                    e.Graphics.DrawRectangle(p, 0, 0, pnlHeaderStatus.Width - 1, pnlHeaderStatus.Height - 1);
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlCenterCard.Width - 1, pnlCenterCard.Height - 1);
                 }
             };
-            pnlHeader.Controls.Add(pnlHeaderStatus);
+            pnlMainWrapper.Controls.Add(pnlCenterCard);
 
-            Panel dot = new Panel();
-            dot.Location = new Point(10, 11);
-            dot.Size = new Size(10, 10);
-            dot.BackColor = Color.FromArgb(16, 185, 129);
-            pnlHeaderStatus.Controls.Add(dot);
+            pnlMainWrapper.Resize += (s, e) => {
+                pnlCenterCard.Location = new Point((pnlMainWrapper.Width - pnlCenterCard.Width) / 2, (pnlMainWrapper.Height - pnlCenterCard.Height) / 2);
+            };
 
-            lblHeaderStatusText = new Label();
-            lblHeaderStatusText.Text = "Bulut & P2P Yayını Aktif (Online)";
-            lblHeaderStatusText.Font = new Font("Segoe UI", 8, FontStyle.Bold);
-            lblHeaderStatusText.ForeColor = Color.FromArgb(52, 211, 153);
-            lblHeaderStatusText.Location = new Point(24, 8);
-            lblHeaderStatusText.AutoSize = true;
-            pnlHeaderStatus.Controls.Add(lblHeaderStatusText);
+            BuildCenterCardContent();
 
-            // 2. BODY CONTAINER
-            pnlBody = new Panel();
-            pnlBody.Dock = DockStyle.Fill;
-            pnlBody.BackColor = Color.FromArgb(7, 11, 20);
-            this.Controls.Add(pnlBody);
-            pnlBody.BringToFront();
-
-            // 3. COLLAPSIBLE SIDEBAR
-            pnlSidebar = new Panel();
-            pnlSidebar.Dock = DockStyle.Left;
-            pnlSidebar.Width = 220;
-            pnlSidebar.BackColor = Color.FromArgb(11, 17, 32);
-            pnlSidebar.Padding = new Padding(8, 12, 8, 12);
-            pnlBody.Controls.Add(pnlSidebar);
-
-            btnNavMyDevice = CreateSidebarItem("🖥️  Bu Bilgisayarım", 10, (s, e) => ShowPage(pageMyDevice, btnNavMyDevice));
-            btnNavRemoteConnect = CreateSidebarItem("🚀  Uzak Bağlantı", 60, (s, e) => ShowPage(pageRemoteConnect, btnNavRemoteConnect));
-            
-            // Dynamic Active Session Tab Button
-            btnNavActiveSession = CreateSidebarItem("🟢  Canlı Oturum (Aktif)", 110, (s, e) => ShowPage(pageActiveSession, btnNavActiveSession));
-            btnNavActiveSession.Visible = false;
-            btnNavActiveSession.ForeColor = Color.FromArgb(52, 211, 153);
-
-            btnNavSecurity = CreateSidebarItem("🔒  Güvenlik & Yetki", 160, (s, e) => ShowPage(pageSecurity, btnNavSecurity));
-            btnNavSettings = CreateSidebarItem("⚙️  Ayarlar & Ağ", 210, (s, e) => ShowPage(pageSettings, btnNavSettings));
-
-            pnlSidebar.Controls.Add(btnNavMyDevice);
-            pnlSidebar.Controls.Add(btnNavRemoteConnect);
-            pnlSidebar.Controls.Add(btnNavActiveSession);
-            pnlSidebar.Controls.Add(btnNavSecurity);
-            pnlSidebar.Controls.Add(btnNavSettings);
-
-            // 4. MAIN CONTENT CONTAINER (PAGES)
-            pnlContent = new Panel();
-            pnlContent.Dock = DockStyle.Fill;
-            pnlContent.BackColor = Color.FromArgb(7, 11, 20);
-            pnlContent.Padding = new Padding(20);
-            pnlBody.Controls.Add(pnlContent);
-            pnlContent.BringToFront();
-
-            BuildPageMyDevice();
-            BuildPageRemoteConnect();
-            BuildPageSecurity();
-            BuildPageSettings();
-            BuildPageActiveSession();
-
-            ShowPage(pageMyDevice, btnNavMyDevice);
+            // 4. In-App Remote Desktop Canvas
+            BuildActiveSessionPage();
         }
 
-        private void ToggleSidebar()
+        private void BuildCenterCardContent()
         {
-            isSidebarOpen = !isSidebarOpen;
-            pnlSidebar.Visible = isSidebarOpen;
+            // --- TOP HEADER ---
+            Panel pnlCardHeader = new Panel();
+            pnlCardHeader.Dock = DockStyle.Top;
+            pnlCardHeader.Height = 56;
+            pnlCardHeader.Padding = new Padding(20, 14, 20, 0);
+            pnlCenterCard.Controls.Add(pnlCardHeader);
+
+            Label lblLogo = new Label();
+            lblLogo.Text = "⚡ Remote Access";
+            lblLogo.Font = new Font("Segoe UI", 13.5f, FontStyle.Bold);
+            lblLogo.ForeColor = clrText;
+            lblLogo.Location = new Point(20, 14);
+            lblLogo.AutoSize = true;
+            pnlCardHeader.Controls.Add(lblLogo);
+
+            // Top Right Hamburger Button [ ☰ ]
+            Button btnHamburger = new Button();
+            btnHamburger.Text = "☰";
+            btnHamburger.Font = new Font("Segoe UI", 12, FontStyle.Bold);
+            btnHamburger.ForeColor = clrText;
+            btnHamburger.BackColor = clrInnerBox;
+            btnHamburger.FlatStyle = FlatStyle.Flat;
+            btnHamburger.FlatAppearance.BorderColor = clrBorder;
+            btnHamburger.Size = new Size(38, 36);
+            btnHamburger.Location = new Point(pnlCenterCard.Width - 58, 10);
+            btnHamburger.Cursor = Cursors.Hand;
+            btnHamburger.Click += (s, e) => ToggleRightMenu();
+            pnlCardHeader.Controls.Add(btnHamburger);
+
+            // --- PROFILE / CLOUD ROW ---
+            Panel pnlProfileRow = new Panel();
+            pnlProfileRow.Location = new Point(24, 68);
+            pnlProfileRow.Size = new Size(492, 54);
+            pnlProfileRow.BackColor = clrInnerBox;
+            pnlProfileRow.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlProfileRow.Width - 1, pnlProfileRow.Height - 1);
+                }
+            };
+            pnlCenterCard.Controls.Add(pnlProfileRow);
+
+            Label lblProfTitle = new Label();
+            lblProfTitle.Text = "Profilinizi Oluşturun";
+            lblProfTitle.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblProfTitle.ForeColor = clrText;
+            lblProfTitle.Location = new Point(14, 8);
+            lblProfTitle.AutoSize = true;
+            pnlProfileRow.Controls.Add(lblProfTitle);
+
+            Label lblProfSub = new Label();
+            lblProfSub.Text = "Cihazlarınızı bulutla eşleştirin";
+            lblProfSub.Font = new Font("Segoe UI", 8.5f);
+            lblProfSub.ForeColor = clrMuted;
+            lblProfSub.Location = new Point(14, 28);
+            lblProfSub.AutoSize = true;
+            pnlProfileRow.Controls.Add(lblProfSub);
+
+            Button btnLogin = new Button();
+            btnLogin.Text = "Giriş Yap";
+            btnLogin.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnLogin.ForeColor = clrText;
+            btnLogin.BackColor = Color.FromArgb(30, 36, 46);
+            btnLogin.FlatStyle = FlatStyle.Flat;
+            btnLogin.FlatAppearance.BorderSize = 0;
+            btnLogin.Size = new Size(90, 30);
+            btnLogin.Location = new Point(388, 12);
+            btnLogin.Cursor = Cursors.Hand;
+            btnLogin.Click += (s, e) => System.Diagnostics.Process.Start("https://my-aetherdesk-control.vercel.app");
+            pnlProfileRow.Controls.Add(btnLogin);
+
+            // --- BU CİHAZIN ADRESİ (ID) BOX ---
+            Label lblIdLabel = new Label();
+            lblIdLabel.Text = "BU CİHAZIN ADRESİ (ID)";
+            lblIdLabel.Font = new Font("Segoe UI", 8, FontStyle.Bold);
+            lblIdLabel.ForeColor = clrMuted;
+            lblIdLabel.Location = new Point(24, 134);
+            lblIdLabel.AutoSize = true;
+            pnlCenterCard.Controls.Add(lblIdLabel);
+
+            Panel pnlIdBox = new Panel();
+            pnlIdBox.Location = new Point(24, 154);
+            pnlIdBox.Size = new Size(492, 58);
+            pnlIdBox.BackColor = clrInnerBox;
+            pnlIdBox.Paint += (s, e) => {
+                // Red glowing bar on left edge
+                using (SolidBrush b = new SolidBrush(clrAccentRed))
+                {
+                    e.Graphics.FillRectangle(b, 0, 0, 4, pnlIdBox.Height);
+                }
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlIdBox.Width - 1, pnlIdBox.Height - 1);
+                }
+            };
+            pnlCenterCard.Controls.Add(pnlIdBox);
+
+            lblIdText = new Label();
+            lblIdText.Text = this.mySessionId.Replace(" ", "");
+            lblIdText.Font = new Font("Segoe UI", 20, FontStyle.Bold);
+            lblIdText.ForeColor = clrText;
+            lblIdText.Location = new Point(18, 10);
+            lblIdText.Size = new Size(380, 40);
+            pnlIdBox.Controls.Add(lblIdText);
+
+            btnCopyId = new Button();
+            btnCopyId.Text = "📋";
+            btnCopyId.Font = new Font("Segoe UI", 12);
+            btnCopyId.ForeColor = clrMuted;
+            btnCopyId.BackColor = Color.Transparent;
+            btnCopyId.FlatStyle = FlatStyle.Flat;
+            btnCopyId.FlatAppearance.BorderSize = 0;
+            btnCopyId.Size = new Size(40, 40);
+            btnCopyId.Location = new Point(440, 9);
+            btnCopyId.Cursor = Cursors.Hand;
+            btnCopyId.Click += (s, e) => {
+                Clipboard.SetText(this.mySessionId.Replace(" ", ""));
+                btnCopyId.ForeColor = Color.FromArgb(52, 211, 153);
+            };
+            pnlIdBox.Controls.Add(btnCopyId);
+
+            // --- DUAL GRID BOXES (YENİ BAĞLANTI & ÇEVRİMİÇİ AĞ) ---
+            // Left: YENİ BAĞLANTI
+            Panel pnlConnectBox = new Panel();
+            pnlConnectBox.Location = new Point(24, 226);
+            pnlConnectBox.Size = new Size(238, 220);
+            pnlConnectBox.BackColor = clrInnerBox;
+            pnlConnectBox.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlConnectBox.Width - 1, pnlConnectBox.Height - 1);
+                }
+            };
+            pnlCenterCard.Controls.Add(pnlConnectBox);
+
+            Label lblConnTag = new Label();
+            lblConnTag.Text = "💬  YENİ BAĞLANTI";
+            lblConnTag.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            lblConnTag.ForeColor = clrText;
+            lblConnTag.Location = new Point(14, 14);
+            lblConnTag.AutoSize = true;
+            pnlConnectBox.Controls.Add(lblConnTag);
+
+            Label lblConnSub = new Label();
+            lblConnSub.Text = "Bağlanmak istediğiniz cihazın ID'sini veya ismini girin.";
+            lblConnSub.Font = new Font("Segoe UI", 8);
+            lblConnSub.ForeColor = clrMuted;
+            lblConnSub.Location = new Point(14, 38);
+            lblConnSub.Size = new Size(210, 36);
+            pnlConnectBox.Controls.Add(lblConnSub);
+
+            txtTargetId = new TextBox();
+            txtTargetId.Font = new Font("Consolas", 11);
+            txtTargetId.BackColor = Color.FromArgb(17, 20, 26);
+            txtTargetId.ForeColor = clrText;
+            txtTargetId.BorderStyle = BorderStyle.FixedSingle;
+            txtTargetId.Location = new Point(14, 88);
+            txtTargetId.Size = new Size(210, 27);
+            txtTargetId.Text = "ID veya İsim (Örn: Ev-PC)";
+            txtTargetId.GotFocus += (s, e) => { if (txtTargetId.Text.StartsWith("ID veya")) txtTargetId.Text = ""; };
+            pnlConnectBox.Controls.Add(txtTargetId);
+
+            btnConnect = new Button();
+            btnConnect.Text = "🔔  Uzaktan Bağlan";
+            btnConnect.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnConnect.ForeColor = Color.White;
+            btnConnect.BackColor = clrAccentRed;
+            btnConnect.FlatStyle = FlatStyle.Flat;
+            btnConnect.FlatAppearance.BorderSize = 0;
+            btnConnect.Location = new Point(14, 150);
+            btnConnect.Size = new Size(210, 44);
+            btnConnect.Cursor = Cursors.Hand;
+            btnConnect.Click += (s, e) => {
+                string target = txtTargetId.Text.Trim().Replace(" ", "");
+                if (!string.IsNullOrEmpty(target) && !target.StartsWith("ID veya"))
+                {
+                    StartInAppSession(target);
+                }
+            };
+            pnlConnectBox.Controls.Add(btnConnect);
+
+            // Right: ÇEVRİMİÇİ AĞ
+            Panel pnlNetworkBox = new Panel();
+            pnlNetworkBox.Location = new Point(278, 226);
+            pnlNetworkBox.Size = new Size(238, 220);
+            pnlNetworkBox.BackColor = clrInnerBox;
+            pnlNetworkBox.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlNetworkBox.Width - 1, pnlNetworkBox.Height - 1);
+                }
+            };
+            pnlCenterCard.Controls.Add(pnlNetworkBox);
+
+            Label lblNetTag = new Label();
+            lblNetTag.Text = "🟢  ÇEVRİMİÇİ AĞ (KÜRESEL)";
+            lblNetTag.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            lblNetTag.ForeColor = Color.FromArgb(52, 211, 153);
+            lblNetTag.Location = new Point(14, 14);
+            lblNetTag.AutoSize = true;
+            pnlNetworkBox.Controls.Add(lblNetTag);
+
+            lblOnlineStatus = new Label();
+            lblOnlineStatus.Text = "Bağlanıyor...";
+            lblOnlineStatus.Font = new Font("Segoe UI", 8);
+            lblOnlineStatus.ForeColor = clrMuted;
+            lblOnlineStatus.Location = new Point(34, 40);
+            lblOnlineStatus.AutoSize = true;
+            pnlNetworkBox.Controls.Add(lblOnlineStatus);
+
+            Label lblSavedTag = new Label();
+            lblSavedTag.Text = "📊  KAYITLI CİHAZLAR";
+            lblSavedTag.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            lblSavedTag.ForeColor = clrMuted;
+            lblSavedTag.Location = new Point(14, 110);
+            lblSavedTag.AutoSize = true;
+            pnlNetworkBox.Controls.Add(lblSavedTag);
+
+            Label lblNoDevices = new Label();
+            lblNoDevices.Text = "Kayıtlı cihaz yok.";
+            lblNoDevices.Font = new Font("Segoe UI", 8.5f);
+            lblNoDevices.ForeColor = Color.FromArgb(100, 116, 139);
+            lblNoDevices.Location = new Point(14, 140);
+            lblNoDevices.AutoSize = true;
+            pnlNetworkBox.Controls.Add(lblNoDevices);
+
+            // --- BOTTOM WEB TEST BUTTON & VERSION ---
+            btnWebPortal = new Button();
+            btnWebPortal.Text = "🌐  Web Test Aracını Aç (Tarayıcıda)";
+            btnWebPortal.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            btnWebPortal.ForeColor = clrMuted;
+            btnWebPortal.BackColor = clrInnerBox;
+            btnWebPortal.FlatStyle = FlatStyle.Flat;
+            btnWebPortal.FlatAppearance.BorderColor = clrBorder;
+            btnWebPortal.Location = new Point(24, 466);
+            btnWebPortal.Size = new Size(492, 42);
+            btnWebPortal.Cursor = Cursors.Hand;
+            btnWebPortal.Click += (s, e) => System.Diagnostics.Process.Start("https://my-aetherdesk-control.vercel.app");
+            pnlCenterCard.Controls.Add(btnWebPortal);
+
+            Label lblVersion = new Label();
+            lblVersion.Text = "Versiyon: v2.2.0 Enterprise";
+            lblVersion.Font = new Font("Segoe UI", 8);
+            lblVersion.ForeColor = Color.FromArgb(100, 116, 139);
+            lblVersion.Location = new Point(210, 526);
+            lblVersion.AutoSize = true;
+            pnlCenterCard.Controls.Add(lblVersion);
         }
 
-        private Button CreateSidebarItem(string title, int top, EventHandler onClick)
+        // SLIDE-OUT RIGHT DRAWER (Image 3)
+        private void BuildRightDrawerMenu()
+        {
+            Panel pnlDrawerHeader = new Panel();
+            pnlDrawerHeader.Dock = DockStyle.Top;
+            pnlDrawerHeader.Height = 50;
+            pnlRightMenu.Controls.Add(pnlDrawerHeader);
+
+            Label lblMenuTitle = new Label();
+            lblMenuTitle.Text = "Menü";
+            lblMenuTitle.Font = new Font("Segoe UI", 13, FontStyle.Bold);
+            lblMenuTitle.ForeColor = clrText;
+            lblMenuTitle.Location = new Point(10, 10);
+            lblMenuTitle.AutoSize = true;
+            pnlDrawerHeader.Controls.Add(lblMenuTitle);
+
+            Button btnCloseDrawer = new Button();
+            btnCloseDrawer.Text = "✕";
+            btnCloseDrawer.Font = new Font("Segoe UI", 11, FontStyle.Bold);
+            btnCloseDrawer.ForeColor = clrMuted;
+            btnCloseDrawer.BackColor = Color.Transparent;
+            btnCloseDrawer.FlatStyle = FlatStyle.Flat;
+            btnCloseDrawer.FlatAppearance.BorderSize = 0;
+            btnCloseDrawer.Size = new Size(34, 34);
+            btnCloseDrawer.Location = new Point(236, 8);
+            btnCloseDrawer.Cursor = Cursors.Hand;
+            btnCloseDrawer.Click += (s, e) => ToggleRightMenu();
+            pnlDrawerHeader.Controls.Add(btnCloseDrawer);
+
+            int top = 60;
+            pnlRightMenu.Controls.Add(CreateDrawerItem("📱  Adres Defteri", top, (s, e) => ShowAddressBookDialog()));
+            top += 54;
+            pnlRightMenu.Controls.Add(CreateDrawerItem("🔒  Güvenlik & Şifre", top, (s, e) => ShowSecurityDialog()));
+            top += 54;
+            pnlRightMenu.Controls.Add(CreateDrawerItem("⚙️  Genel Ayarlar", top, (s, e) => ShowSettingsDialog()));
+            top += 54;
+            pnlRightMenu.Controls.Add(CreateDrawerItem("🛡️  Erişim Yetkileri", top, (s, e) => ShowPermissionsDialog()));
+            top += 54;
+            pnlRightMenu.Controls.Add(CreateDrawerItem("ℹ️  Hakkında", top, (s, e) => ShowAboutDialog()));
+        }
+
+        private Button CreateDrawerItem(string title, int top, EventHandler onClick)
         {
             Button btn = new Button();
             btn.Text = title;
             btn.Top = top;
-            btn.Left = 8;
-            btn.Width = 204;
+            btn.Left = 10;
+            btn.Width = 260;
             btn.Height = 44;
             btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderSize = 0;
-            btn.BackColor = Color.Transparent;
-            btn.ForeColor = Color.FromArgb(203, 213, 225);
+            btn.FlatAppearance.BorderColor = clrBorder;
+            btn.BackColor = clrInnerBox;
+            btn.ForeColor = clrText;
             btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             btn.TextAlign = ContentAlignment.MiddleLeft;
             btn.Padding = new Padding(12, 0, 0, 0);
@@ -271,305 +478,51 @@ namespace AetherDesk.Agent
             return btn;
         }
 
-        private void ShowPage(Panel targetPage, Button activeBtn)
+        private void ToggleRightMenu()
         {
-            pageMyDevice.Visible = false;
-            pageRemoteConnect.Visible = false;
-            pageSecurity.Visible = false;
-            pageSettings.Visible = false;
-            pageActiveSession.Visible = false;
-
-            btnNavMyDevice.BackColor = Color.Transparent;
-            btnNavMyDevice.ForeColor = Color.FromArgb(203, 213, 225);
-            btnNavRemoteConnect.BackColor = Color.Transparent;
-            btnNavRemoteConnect.ForeColor = Color.FromArgb(203, 213, 225);
-            btnNavSecurity.BackColor = Color.Transparent;
-            btnNavSecurity.ForeColor = Color.FromArgb(203, 213, 225);
-            btnNavSettings.BackColor = Color.Transparent;
-            btnNavSettings.ForeColor = Color.FromArgb(203, 213, 225);
-
-            if (isInAppStreaming)
-            {
-                btnNavActiveSession.BackColor = Color.Transparent;
-                btnNavActiveSession.ForeColor = Color.FromArgb(52, 211, 153);
-            }
-
-            if (activeBtn != null)
-            {
-                activeBtn.BackColor = Color.FromArgb(30, 41, 59);
-                activeBtn.ForeColor = Color.FromArgb(56, 189, 248);
-            }
-
-            targetPage.Visible = true;
-            targetPage.BringToFront();
+            isMenuOpen = !isMenuOpen;
+            pnlRightMenu.Visible = isMenuOpen;
+            pnlRightMenu.BringToFront();
         }
 
-        // PAGE 1: Bu Bilgisayarım
-        private void BuildPageMyDevice()
+        // --- IN-APP REMOTE DESKTOP SESSION CANVAS ---
+        private void BuildActiveSessionPage()
         {
-            pageMyDevice = new Panel();
-            pageMyDevice.Dock = DockStyle.Fill;
-            pnlContent.Controls.Add(pageMyDevice);
-
-            Label lblH = new Label();
-            lblH.Text = "Bu Bilgisayarın Oturum Bilgisi";
-            lblH.Font = new Font("Segoe UI", 14, FontStyle.Bold);
-            lblH.ForeColor = Color.FromArgb(248, 250, 252);
-            lblH.Location = new Point(0, 0);
-            lblH.AutoSize = true;
-            pageMyDevice.Controls.Add(lblH);
-
-            Label lblSub = new Label();
-            lblSub.Text = "Uzak kullanıcının bağlanabilmesi için aşağıdaki 9 haneli ID'yi paylaşın.";
-            lblSub.Font = new Font("Segoe UI", 9);
-            lblSub.ForeColor = Color.FromArgb(148, 163, 184);
-            lblSub.Location = new Point(0, 26);
-            lblSub.AutoSize = true;
-            pageMyDevice.Controls.Add(lblSub);
-
-            Panel pnlIdBox = new Panel();
-            pnlIdBox.Location = new Point(0, 56);
-            pnlIdBox.Size = new Size(660, 115);
-            pnlIdBox.BackColor = Color.FromArgb(15, 23, 42);
-            pnlIdBox.Paint += (s, e) => {
-                using (Pen p = new Pen(Color.FromArgb(56, 189, 248), 1.5f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, pnlIdBox.Width - 1, pnlIdBox.Height - 1);
-                }
-            };
-            pageMyDevice.Controls.Add(pnlIdBox);
-
-            Label lblTag = new Label();
-            lblTag.Text = "BU CİHAZIN 9 HANELİ ID'Sİ:";
-            lblTag.Font = new Font("Segoe UI", 8, FontStyle.Bold);
-            lblTag.ForeColor = Color.FromArgb(148, 163, 184);
-            lblTag.Location = new Point(18, 14);
-            lblTag.AutoSize = true;
-            pnlIdBox.Controls.Add(lblTag);
-
-            lblIdText = new Label();
-            lblIdText.Text = this.mySessionId;
-            lblIdText.Font = new Font("Consolas", 26, FontStyle.Bold);
-            lblIdText.ForeColor = Color.FromArgb(56, 189, 248);
-            lblIdText.Location = new Point(18, 32);
-            lblIdText.Size = new Size(330, 44);
-            pnlIdBox.Controls.Add(lblIdText);
-
-            btnCopyId = new Button();
-            btnCopyId.Text = "📋 ID Kopyala";
-            btnCopyId.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-            btnCopyId.ForeColor = Color.White;
-            btnCopyId.BackColor = Color.FromArgb(37, 99, 235);
-            btnCopyId.FlatStyle = FlatStyle.Flat;
-            btnCopyId.FlatAppearance.BorderSize = 0;
-            btnCopyId.Location = new Point(480, 36);
-            btnCopyId.Size = new Size(160, 42);
-            btnCopyId.Cursor = Cursors.Hand;
-            btnCopyId.Click += (s, e) => {
-                Clipboard.SetText(this.mySessionId.Replace(" ", ""));
-                btnCopyId.Text = "✓ Kopyalandı!";
-                btnCopyId.BackColor = Color.FromArgb(16, 185, 129);
-            };
-            pnlIdBox.Controls.Add(btnCopyId);
-
-            string localIp = GetLocalIp();
-            Label lblIp = new Label();
-            lblIp.Text = "Yerel IP: " + localIp + ":8443  |  Bulut Sunucu: Aktif (Render)";
-            lblIp.Font = new Font("Consolas", 8.5f);
-            lblIp.ForeColor = Color.FromArgb(148, 163, 184);
-            lblIp.Location = new Point(18, 86);
-            lblIp.AutoSize = true;
-            pnlIdBox.Controls.Add(lblIp);
-
-            GroupBox grpPerms = new GroupBox();
-            grpPerms.Text = " 🛡️ Bağlantı Yetkileri (İzin Verilen Eylemler) ";
-            grpPerms.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            grpPerms.ForeColor = Color.FromArgb(56, 189, 248);
-            grpPerms.Location = new Point(0, 185);
-            grpPerms.Size = new Size(660, 130);
-            pageMyDevice.Controls.Add(grpPerms);
-
-            chkInput = new CheckBox();
-            chkInput.Text = "Fare ve Klavye Kontrolü (Tam Yönetim)";
-            chkInput.Checked = true;
-            chkInput.Font = new Font("Segoe UI", 9);
-            chkInput.ForeColor = Color.FromArgb(241, 245, 249);
-            chkInput.Location = new Point(18, 26);
-            chkInput.Size = new Size(600, 24);
-            chkInput.CheckedChanged += (s, e) => SavePermissions();
-            grpPerms.Controls.Add(chkInput);
-
-            chkFiles = new CheckBox();
-            chkFiles.Text = "Çift Yönlü Dosya Transferi";
-            chkFiles.Checked = true;
-            chkFiles.Font = new Font("Segoe UI", 9);
-            chkFiles.ForeColor = Color.FromArgb(241, 245, 249);
-            chkFiles.Location = new Point(18, 56);
-            chkFiles.Size = new Size(600, 24);
-            chkFiles.CheckedChanged += (s, e) => SavePermissions();
-            grpPerms.Controls.Add(chkFiles);
-
-            chkClipboard = new CheckBox();
-            chkClipboard.Text = "Pano Paylaşımı (Metin Kopyala / Yapıştır)";
-            chkClipboard.Checked = true;
-            chkClipboard.Font = new Font("Segoe UI", 9);
-            chkClipboard.ForeColor = Color.FromArgb(241, 245, 249);
-            chkClipboard.Location = new Point(18, 86);
-            chkClipboard.Size = new Size(600, 24);
-            chkClipboard.CheckedChanged += (s, e) => SavePermissions();
-            grpPerms.Controls.Add(chkClipboard);
-
-            btnDisconnect = new Button();
-            btnDisconnect.Text = "🚫 Aktif Bağlantıyı Hemen Sonlandır";
-            btnDisconnect.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            btnDisconnect.ForeColor = Color.White;
-            btnDisconnect.BackColor = Color.FromArgb(225, 29, 72);
-            btnDisconnect.FlatStyle = FlatStyle.Flat;
-            btnDisconnect.FlatAppearance.BorderSize = 0;
-            btnDisconnect.Location = new Point(0, 330);
-            btnDisconnect.Size = new Size(660, 38);
-            btnDisconnect.Cursor = Cursors.Hand;
-            btnDisconnect.Click += (s, e) => {
-                MessageBox.Show("Uzak oturum sonlandırıldı.", "AetherDesk Enterprise", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            };
-            pageMyDevice.Controls.Add(btnDisconnect);
-        }
-
-        // PAGE 2: Uzak Bağlantı
-        private void BuildPageRemoteConnect()
-        {
-            pageRemoteConnect = new Panel();
-            pageRemoteConnect.Dock = DockStyle.Fill;
-            pnlContent.Controls.Add(pageRemoteConnect);
-
-            Label lblH = new Label();
-            lblH.Text = "Başka Bir Cihaza Bağlan";
-            lblH.Font = new Font("Segoe UI", 14, FontStyle.Bold);
-            lblH.ForeColor = Color.FromArgb(248, 250, 252);
-            lblH.Location = new Point(0, 0);
-            lblH.AutoSize = true;
-            pageRemoteConnect.Controls.Add(lblH);
-
-            Label lblSub = new Label();
-            lblSub.Text = "Karşı bilgisayarın 9 haneli ID'sini girerek bu pencere içinde anında kontrol edin.";
-            lblSub.Font = new Font("Segoe UI", 9);
-            lblSub.ForeColor = Color.FromArgb(148, 163, 184);
-            lblSub.Location = new Point(0, 26);
-            lblSub.AutoSize = true;
-            pageRemoteConnect.Controls.Add(lblSub);
-
-            Panel pnlBox = new Panel();
-            pnlBox.Location = new Point(0, 56);
-            pnlBox.Size = new Size(660, 65);
-            pnlBox.BackColor = Color.FromArgb(15, 23, 42);
-            pageRemoteConnect.Controls.Add(pnlBox);
-
-            txtTargetId = new TextBox();
-            txtTargetId.Font = new Font("Consolas", 14, FontStyle.Bold);
-            txtTargetId.BackColor = Color.FromArgb(10, 15, 29);
-            txtTargetId.ForeColor = Color.FromArgb(56, 189, 248);
-            txtTargetId.Location = new Point(16, 16);
-            txtTargetId.Size = new Size(440, 32);
-            pnlBox.Controls.Add(txtTargetId);
-
-            btnConnectTarget = new Button();
-            btnConnectTarget.Text = "🚀 Hemen Bağlan";
-            btnConnectTarget.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            btnConnectTarget.ForeColor = Color.White;
-            btnConnectTarget.BackColor = Color.FromArgb(37, 99, 235);
-            btnConnectTarget.FlatStyle = FlatStyle.Flat;
-            btnConnectTarget.FlatAppearance.BorderSize = 0;
-            btnConnectTarget.Location = new Point(475, 14);
-            btnConnectTarget.Size = new Size(170, 36);
-            btnConnectTarget.Cursor = Cursors.Hand;
-            btnConnectTarget.Click += (s, e) => {
-                string target = txtTargetId.Text.Trim().Replace(" ", "");
-                if (!string.IsNullOrEmpty(target))
-                {
-                    StartInAppSession(target);
-                }
-            };
-            pnlBox.Controls.Add(btnConnectTarget);
-
-            Label lblRec = new Label();
-            lblRec.Text = "Son Bağlanılan Oturumlar:";
-            lblRec.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-            lblRec.ForeColor = Color.FromArgb(203, 213, 225);
-            lblRec.Location = new Point(0, 140);
-            lblRec.AutoSize = true;
-            pageRemoteConnect.Controls.Add(lblRec);
-
-            pnlRecentFlow = new FlowLayoutPanel();
-            pnlRecentFlow.Location = new Point(0, 170);
-            pnlRecentFlow.Size = new Size(660, 200);
-            pnlRecentFlow.AutoScroll = true;
-            pageRemoteConnect.Controls.Add(pnlRecentFlow);
-
-            AddRecentCard("778 375 604", "Ofis Bilgisayarı", "14 ms");
-            AddRecentCard("482 910 375", "Ana Sunucu", "20 ms");
-            AddRecentCard("891 204 153", "Muhasebe Terminali", "18 ms");
-        }
-
-        private void AddRecentCard(string id, string name, string ping)
-        {
-            Panel card = new Panel();
-            card.Size = new Size(195, 90);
-            card.Margin = new Padding(0, 0, 12, 12);
-            card.BackColor = Color.FromArgb(15, 23, 42);
-            card.Cursor = Cursors.Hand;
-
-            Label lblN = new Label();
-            lblN.Text = name;
-            lblN.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-            lblN.ForeColor = Color.FromArgb(241, 245, 249);
-            lblN.Location = new Point(10, 8);
-            lblN.AutoSize = true;
-            card.Controls.Add(lblN);
-
-            Label lblI = new Label();
-            lblI.Text = id;
-            lblI.Font = new Font("Consolas", 10, FontStyle.Bold);
-            lblI.ForeColor = Color.FromArgb(56, 189, 248);
-            lblI.Location = new Point(10, 30);
-            lblI.AutoSize = true;
-            card.Controls.Add(lblI);
-
-            Label lblP = new Label();
-            lblP.Text = "🟢 " + ping;
-            lblP.Font = new Font("Segoe UI", 8);
-            lblP.ForeColor = Color.FromArgb(52, 211, 153);
-            lblP.Location = new Point(10, 60);
-            lblP.AutoSize = true;
-            card.Controls.Add(lblP);
-
-            card.Click += (s, e) => {
-                txtTargetId.Text = id.Replace(" ", "");
-                StartInAppSession(id.Replace(" ", ""));
-            };
-
-            pnlRecentFlow.Controls.Add(card);
-        }
-
-        // UNIFIED IN-APP REMOTE DESKTOP CANVAS (SINGLE-WINDOW WITH TIMER & FILE TRANSFER)
-        private void BuildPageActiveSession()
-        {
-            pageActiveSession = new Panel();
-            pageActiveSession.Dock = DockStyle.Fill;
-            pageActiveSession.BackColor = Color.Black;
-            pnlContent.Controls.Add(pageActiveSession);
+            pnlActiveSession = new Panel();
+            pnlActiveSession.Dock = DockStyle.Fill;
+            pnlActiveSession.BackColor = Color.Black;
+            pnlActiveSession.Visible = false;
+            this.Controls.Add(pnlActiveSession);
 
             pnlSessionTopBar = new Panel();
             pnlSessionTopBar.Dock = DockStyle.Top;
-            pnlSessionTopBar.Height = 44;
-            pnlSessionTopBar.BackColor = Color.FromArgb(15, 23, 42);
-            pnlSessionTopBar.Padding = new Padding(10, 6, 10, 6);
-            pageActiveSession.Controls.Add(pnlSessionTopBar);
+            pnlSessionTopBar.Height = 46;
+            pnlSessionTopBar.BackColor = clrCardBg;
+            pnlSessionTopBar.Padding = new Padding(12, 6, 12, 6);
+            pnlActiveSession.Controls.Add(pnlSessionTopBar);
+
+            Button btnBackToMenu = new Button();
+            btnBackToMenu.Text = "← Ana Menü";
+            btnBackToMenu.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnBackToMenu.ForeColor = clrText;
+            btnBackToMenu.BackColor = clrInnerBox;
+            btnBackToMenu.FlatStyle = FlatStyle.Flat;
+            btnBackToMenu.FlatAppearance.BorderColor = clrBorder;
+            btnBackToMenu.Size = new Size(100, 30);
+            btnBackToMenu.Location = new Point(12, 8);
+            btnBackToMenu.Cursor = Cursors.Hand;
+            btnBackToMenu.Click += (s, e) => {
+                pnlActiveSession.Visible = false;
+                pnlMainWrapper.Visible = true;
+                pnlMainWrapper.BringToFront();
+            };
+            pnlSessionTopBar.Controls.Add(btnBackToMenu);
 
             lblSessionTargetInfo = new Label();
             lblSessionTargetInfo.Text = "⚡ Canlı Oturum: Bağlanıyor...";
             lblSessionTargetInfo.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             lblSessionTargetInfo.ForeColor = Color.FromArgb(56, 189, 248);
-            lblSessionTargetInfo.Location = new Point(12, 12);
+            lblSessionTargetInfo.Location = new Point(125, 12);
             lblSessionTargetInfo.AutoSize = true;
             pnlSessionTopBar.Controls.Add(lblSessionTargetInfo);
 
@@ -577,11 +530,10 @@ namespace AetherDesk.Agent
             lblSessionDuration.Text = "⏱️ 00:00:00";
             lblSessionDuration.Font = new Font("Consolas", 9.5f, FontStyle.Bold);
             lblSessionDuration.ForeColor = Color.FromArgb(52, 211, 153);
-            lblSessionDuration.Location = new Point(320, 12);
+            lblSessionDuration.Location = new Point(340, 12);
             lblSessionDuration.AutoSize = true;
             pnlSessionTopBar.Controls.Add(lblSessionDuration);
 
-            // File Send Button
             btnSessionSendFile = new Button();
             btnSessionSendFile.Text = "📁 Dosya Gönder";
             btnSessionSendFile.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
@@ -589,8 +541,8 @@ namespace AetherDesk.Agent
             btnSessionSendFile.BackColor = Color.FromArgb(30, 41, 59);
             btnSessionSendFile.FlatStyle = FlatStyle.Flat;
             btnSessionSendFile.FlatAppearance.BorderSize = 0;
-            btnSessionSendFile.Size = new Size(115, 28);
-            btnSessionSendFile.Location = new Point(480, 8);
+            btnSessionSendFile.Size = new Size(120, 30);
+            btnSessionSendFile.Location = new Point(540, 8);
             btnSessionSendFile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSessionSendFile.Cursor = Cursors.Hand;
             btnSessionSendFile.Click += (s, e) => SendFileToRemote();
@@ -603,8 +555,8 @@ namespace AetherDesk.Agent
             btnSessionCtrlAltDel.BackColor = Color.FromArgb(30, 41, 59);
             btnSessionCtrlAltDel.FlatStyle = FlatStyle.Flat;
             btnSessionCtrlAltDel.FlatAppearance.BorderSize = 0;
-            btnSessionCtrlAltDel.Size = new Size(110, 28);
-            btnSessionCtrlAltDel.Location = new Point(605, 8);
+            btnSessionCtrlAltDel.Size = new Size(115, 30);
+            btnSessionCtrlAltDel.Location = new Point(670, 8);
             btnSessionCtrlAltDel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSessionCtrlAltDel.Cursor = Cursors.Hand;
             btnSessionCtrlAltDel.Click += (s, e) => SendRemoteKey("CtrlAltDel");
@@ -614,11 +566,11 @@ namespace AetherDesk.Agent
             btnCloseSession.Text = "✕ Oturumu Kapat";
             btnCloseSession.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             btnCloseSession.ForeColor = Color.White;
-            btnCloseSession.BackColor = Color.FromArgb(225, 29, 72);
+            btnCloseSession.BackColor = clrAccentRed;
             btnCloseSession.FlatStyle = FlatStyle.Flat;
             btnCloseSession.FlatAppearance.BorderSize = 0;
-            btnCloseSession.Size = new Size(125, 28);
-            btnCloseSession.Location = new Point(725, 8);
+            btnCloseSession.Size = new Size(130, 30);
+            btnCloseSession.Location = new Point(795, 8);
             btnCloseSession.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnCloseSession.Cursor = Cursors.Hand;
             btnCloseSession.Click += (s, e) => CloseInAppSession();
@@ -629,10 +581,9 @@ namespace AetherDesk.Agent
             picSessionViewport.SizeMode = PictureBoxSizeMode.Zoom;
             picSessionViewport.BackColor = Color.Black;
             picSessionViewport.Cursor = Cursors.Cross;
-            pageActiveSession.Controls.Add(picSessionViewport);
+            pnlActiveSession.Controls.Add(picSessionViewport);
             picSessionViewport.BringToFront();
 
-            // Pixel-Perfect Mouse & Click Forwarding
             picSessionViewport.MouseClick += (s, e) => {
                 Point norm = TranslateZoomCoordinates(picSessionViewport, e.Location);
                 if (!norm.IsEmpty)
@@ -652,7 +603,7 @@ namespace AetherDesk.Agent
 
             this.KeyPreview = true;
             this.KeyDown += (s, e) => {
-                if (isInAppStreaming && pageActiveSession.Visible)
+                if (isInAppStreaming && pnlActiveSession.Visible)
                 {
                     SendRemoteKey(e.KeyCode.ToString());
                 }
@@ -666,8 +617,10 @@ namespace AetherDesk.Agent
             sessionTimer.Start();
 
             lblSessionTargetInfo.Text = "⚡ Canlı Oturum: " + targetId + " (Doğrudan Masaüstü)";
-            btnNavActiveSession.Visible = true;
-            ShowPage(pageActiveSession, btnNavActiveSession);
+            pnlMainWrapper.Visible = false;
+            pnlRightMenu.Visible = false;
+            pnlActiveSession.Visible = true;
+            pnlActiveSession.BringToFront();
 
             if (!isInAppStreaming)
             {
@@ -722,7 +675,6 @@ namespace AetherDesk.Agent
             {
                 TimeSpan elapsed = DateTime.Now - sessionStartTime;
                 lblSessionDuration.Text = string.Format("⏱️ {0:D2}:{1:D2}:{2:D2}", (int)elapsed.TotalHours, elapsed.Minutes, elapsed.Seconds);
-                btnNavActiveSession.Text = string.Format("🟢 Canlı ({0:D2}:{1:D2})", elapsed.Minutes, elapsed.Seconds);
             }
         }
 
@@ -730,8 +682,9 @@ namespace AetherDesk.Agent
         {
             isInAppStreaming = false;
             sessionTimer.Stop();
-            btnNavActiveSession.Visible = false;
-            ShowPage(pageRemoteConnect, btnNavRemoteConnect);
+            pnlActiveSession.Visible = false;
+            pnlMainWrapper.Visible = true;
+            pnlMainWrapper.BringToFront();
         }
 
         private void SendFileToRemote()
@@ -750,7 +703,7 @@ namespace AetherDesk.Agent
                             byte[] fileBytes = File.ReadAllBytes(filePath);
                             string uploadUrl = string.Format("{0}/api/file/upload/{1}?name={2}",
                                 CLOUD_RELAY_URL, activeConnectedId, Uri.EscapeDataString(fileName));
-                            
+
                             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(uploadUrl);
                             req.Method = "POST";
                             req.ContentType = "application/octet-stream";
@@ -825,107 +778,72 @@ namespace AetherDesk.Agent
             });
         }
 
-        // PAGE 3: Güvenlik & Yetki
-        private void BuildPageSecurity()
+        // --- DIALOGS FOR RIGHT DRAWER MENU ---
+        private void ShowAddressBookDialog()
         {
-            pageSecurity = new Panel();
-            pageSecurity.Dock = DockStyle.Fill;
-            pnlContent.Controls.Add(pageSecurity);
-
-            Label lblH = new Label();
-            lblH.Text = "Erişim Doğrulama ve Güvenlik";
-            lblH.Font = new Font("Segoe UI", 14, FontStyle.Bold);
-            lblH.ForeColor = Color.FromArgb(248, 250, 252);
-            lblH.Location = new Point(0, 0);
-            lblH.AutoSize = true;
-            pageSecurity.Controls.Add(lblH);
-
-            GroupBox grpM = new GroupBox();
-            grpM.Text = " 🔒 Bağlantı Doğrulama Modu ";
-            grpM.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            grpM.ForeColor = Color.FromArgb(56, 189, 248);
-            grpM.Location = new Point(0, 45);
-            grpM.Size = new Size(660, 200);
-            pageSecurity.Controls.Add(grpM);
-
-            rbUnattended = new RadioButton();
-            rbUnattended.Text = "Katılımsız Erişim (Şifresiz Doğrudan Kabul)";
-            rbUnattended.Font = new Font("Segoe UI", 9);
-            rbUnattended.ForeColor = Color.FromArgb(241, 245, 249);
-            rbUnattended.Location = new Point(20, 28);
-            rbUnattended.Size = new Size(600, 24);
-            grpM.Controls.Add(rbUnattended);
-
-            rbPassword = new RadioButton();
-            rbPassword.Text = "Özel Şifreli Erişim (Bağlanana şifre sorulsun)";
-            rbPassword.Font = new Font("Segoe UI", 9);
-            rbPassword.ForeColor = Color.FromArgb(241, 245, 249);
-            rbPassword.Location = new Point(20, 58);
-            rbPassword.Size = new Size(600, 24);
-            grpM.Controls.Add(rbPassword);
-
-            txtCustomPassword = new TextBox();
-            txtCustomPassword.Font = new Font("Consolas", 11);
-            txtCustomPassword.BackColor = Color.FromArgb(10, 15, 29);
-            txtCustomPassword.ForeColor = Color.FromArgb(245, 158, 11);
-            txtCustomPassword.Location = new Point(42, 88);
-            txtCustomPassword.Size = new Size(200, 27);
-            grpM.Controls.Add(txtCustomPassword);
-
-            rbPrompt = new RadioButton();
-            rbPrompt.Text = "Manuel Onay (Her bağlantıda ekranda Kabul/Reddet çıksın)";
-            rbPrompt.Font = new Font("Segoe UI", 9);
-            rbPrompt.ForeColor = Color.FromArgb(241, 245, 249);
-            rbPrompt.Location = new Point(20, 126);
-            rbPrompt.Size = new Size(600, 24);
-            grpM.Controls.Add(rbPrompt);
-
-            btnSaveSecurity = new Button();
-            btnSaveSecurity.Text = "✓ Güvenlik Ayarlarını Kaydet";
-            btnSaveSecurity.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            btnSaveSecurity.ForeColor = Color.White;
-            btnSaveSecurity.BackColor = Color.FromArgb(16, 185, 129);
-            btnSaveSecurity.FlatStyle = FlatStyle.Flat;
-            btnSaveSecurity.FlatAppearance.BorderSize = 0;
-            btnSaveSecurity.Location = new Point(0, 265);
-            btnSaveSecurity.Size = new Size(660, 42);
-            btnSaveSecurity.Cursor = Cursors.Hand;
-            btnSaveSecurity.Click += (s, e) => SaveSecurity();
-            pageSecurity.Controls.Add(btnSaveSecurity);
+            MessageBox.Show("Kayıtlı Cihazlar:\n\n1. Ofis Bilgisayarı (778 375 604) - 🟢 Online\n2. Ana Sunucu (482 910 375) - 🟢 Online\n3. Muhasebe (891 204 153) - 🟢 Online", "Adres Defteri", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        // PAGE 4: Ayarlar & Ağ
-        private void BuildPageSettings()
+        private void ShowSecurityDialog()
         {
-            pageSettings = new Panel();
-            pageSettings.Dock = DockStyle.Fill;
-            pnlContent.Controls.Add(pageSettings);
+            Form dlg = new Form();
+            dlg.Text = "Güvenlik & Şifre";
+            dlg.Size = new Size(420, 260);
+            dlg.StartPosition = FormStartPosition.CenterParent;
+            dlg.BackColor = clrCardBg;
+            dlg.ForeColor = clrText;
 
-            Label lblH = new Label();
-            lblH.Text = "Sistem & Ağ Yapılandırması";
-            lblH.Font = new Font("Segoe UI", 14, FontStyle.Bold);
-            lblH.ForeColor = Color.FromArgb(248, 250, 252);
-            lblH.Location = new Point(0, 0);
-            lblH.AutoSize = true;
-            pageSettings.Controls.Add(lblH);
+            RadioButton rbU = new RadioButton { Text = "Katılımsız Erişim (Şifresiz)", Location = new Point(20, 20), Size = new Size(350, 24), Checked = (accessMode == "UNATTENDED") };
+            RadioButton rbP = new RadioButton { Text = "Özel Şifreli Erişim:", Location = new Point(20, 50), Size = new Size(350, 24), Checked = (accessMode == "PASSWORD") };
+            TextBox txtP = new TextBox { Location = new Point(40, 80), Size = new Size(200, 26), Text = accessPassword, BackColor = clrInnerBox, ForeColor = Color.FromArgb(245, 158, 11) };
+            RadioButton rbM = new RadioButton { Text = "Manuel Onay (Ekranda Sor)", Location = new Point(20, 116), Size = new Size(350, 24), Checked = (accessMode == "PROMPT") };
 
-            Panel pnlBox = new Panel();
-            pnlBox.Location = new Point(0, 45);
-            pnlBox.Size = new Size(660, 260);
-            pnlBox.BackColor = Color.FromArgb(15, 23, 42);
-            pnlBox.Padding = new Padding(20);
-            pageSettings.Controls.Add(pnlBox);
+            Button btnS = new Button { Text = "Kaydet", Location = new Point(20, 160), Size = new Size(360, 36), BackColor = clrAccentRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+            btnS.Click += (s, e) => {
+                accessMode = rbP.Checked ? "PASSWORD" : (rbM.Checked ? "PROMPT" : "UNATTENDED");
+                accessPassword = txtP.Text.Trim();
+                SaveSecurity();
+                dlg.Close();
+            };
 
-            Label lblInfo = new Label();
-            lblInfo.Text = "Bulut Sinyal & Relay Sunucusu:\n" + CLOUD_RELAY_URL + "\n\n" +
-                           "Yerel Soket Dinleme Portu:\n8443 (HTTP Direct P2P)\n\n" +
-                           "Ekran Yakalama Çekirdeği:\nDXGI / Windows Graphics Subsystem (60 FPS)\n\n" +
-                           "DPI Farkındalığı & Hassasiyet:\nAktif (Piksel Birebir Eşleme)\n\n" +
-                           "Dosya Transferi:\nAktif (C:\\Users\\<Kullanıcı>\\Downloads)";
-            lblInfo.Font = new Font("Segoe UI", 9.5f);
-            lblInfo.ForeColor = Color.FromArgb(203, 213, 225);
-            lblInfo.Dock = DockStyle.Fill;
-            pnlBox.Controls.Add(lblInfo);
+            dlg.Controls.Add(rbU); dlg.Controls.Add(rbP); dlg.Controls.Add(txtP); dlg.Controls.Add(rbM); dlg.Controls.Add(btnS);
+            dlg.ShowDialog(this);
+        }
+
+        private void ShowPermissionsDialog()
+        {
+            Form dlg = new Form();
+            dlg.Text = "Erişim Yetkileri";
+            dlg.Size = new Size(400, 230);
+            dlg.StartPosition = FormStartPosition.CenterParent;
+            dlg.BackColor = clrCardBg;
+            dlg.ForeColor = clrText;
+
+            CheckBox cI = new CheckBox { Text = "Fare ve Klavye Kontrolü", Location = new Point(20, 20), Size = new Size(350, 24), Checked = allowInput };
+            CheckBox cF = new CheckBox { Text = "Çift Yönlü Dosya Transferi", Location = new Point(20, 50), Size = new Size(350, 24), Checked = allowFiles };
+            CheckBox cC = new CheckBox { Text = "Pano Paylaşımı (Kopyala/Yapıştır)", Location = new Point(20, 80), Size = new Size(350, 24), Checked = allowClip };
+
+            Button btnS = new Button { Text = "Kaydet", Location = new Point(20, 120), Size = new Size(340, 36), BackColor = clrAccentRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+            btnS.Click += (s, e) => {
+                allowInput = cI.Checked;
+                allowFiles = cF.Checked;
+                allowClip = cC.Checked;
+                SavePermissions();
+                dlg.Close();
+            };
+
+            dlg.Controls.Add(cI); dlg.Controls.Add(cF); dlg.Controls.Add(cC); dlg.Controls.Add(btnS);
+            dlg.ShowDialog(this);
+        }
+
+        private void ShowSettingsDialog()
+        {
+            MessageBox.Show("Sistem Teşhisi:\n\nBulut Sunucu: " + CLOUD_RELAY_URL + "\nYerel P2P Portu: 8443\nEkran Çekirdeği: DXGI 60 FPS\nDPI Skalalama: %100 Birebir", "Genel Ayarlar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void ShowAboutDialog()
+        {
+            MessageBox.Show("AetherDesk Enterprise\nVersiyon: v2.2.0 (2026 Edition)\n\nUçtan uca şifreli, yüksek performanslı yeni nesil uzaktan yönetim sistemi.", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void LoadSettings()
@@ -934,23 +852,14 @@ namespace AetherDesk.Agent
             {
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
                 {
-                    string mode = (key.GetValue("AccessMode") ?? "UNATTENDED").ToString();
-                    string pass = (key.GetValue("AccessPassword") ?? "aether2026").ToString();
-                    bool allowInput = bool.Parse((key.GetValue("AllowInput") ?? "True").ToString());
-                    bool allowFiles = bool.Parse((key.GetValue("AllowFiles") ?? "True").ToString());
-                    bool allowClip = bool.Parse((key.GetValue("AllowClip") ?? "True").ToString());
-
-                    txtCustomPassword.Text = pass;
-                    chkInput.Checked = allowInput;
-                    chkFiles.Checked = allowFiles;
-                    chkClipboard.Checked = allowClip;
-
-                    if (mode == "PASSWORD") rbPassword.Checked = true;
-                    else if (mode == "PROMPT") rbPrompt.Checked = true;
-                    else rbUnattended.Checked = true;
+                    accessMode = (key.GetValue("AccessMode") ?? "UNATTENDED").ToString();
+                    accessPassword = (key.GetValue("AccessPassword") ?? "aether2026").ToString();
+                    allowInput = bool.Parse((key.GetValue("AllowInput") ?? "True").ToString());
+                    allowFiles = bool.Parse((key.GetValue("AllowFiles") ?? "True").ToString());
+                    allowClip = bool.Parse((key.GetValue("AllowClip") ?? "True").ToString());
                 }
             }
-            catch { rbUnattended.Checked = true; }
+            catch { }
         }
 
         private void SavePermissions()
@@ -959,9 +868,9 @@ namespace AetherDesk.Agent
             {
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
                 {
-                    key.SetValue("AllowInput", chkInput.Checked.ToString());
-                    key.SetValue("AllowFiles", chkFiles.Checked.ToString());
-                    key.SetValue("AllowClip", chkClipboard.Checked.ToString());
+                    key.SetValue("AllowInput", allowInput.ToString());
+                    key.SetValue("AllowFiles", allowFiles.ToString());
+                    key.SetValue("AllowClip", allowClip.ToString());
                 }
             }
             catch { }
@@ -971,14 +880,11 @@ namespace AetherDesk.Agent
         {
             try
             {
-                string mode = rbPassword.Checked ? "PASSWORD" : (rbPrompt.Checked ? "PROMPT" : "UNATTENDED");
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
                 {
-                    key.SetValue("AccessMode", mode);
-                    key.SetValue("AccessPassword", txtCustomPassword.Text.Trim());
+                    key.SetValue("AccessMode", accessMode);
+                    key.SetValue("AccessPassword", accessPassword);
                 }
-                btnSaveSecurity.Text = "✓ Ayarlar Kaydedildi!";
-                btnSaveSecurity.BackColor = Color.FromArgb(5, 150, 105);
             }
             catch { }
         }
@@ -1058,7 +964,7 @@ namespace AetherDesk.Agent
                     return;
                 }
 
-                if (path == "/mouse" && chkInput.Checked)
+                if (path == "/mouse" && allowInput)
                 {
                     ExecuteMouseEvent(ctx.Request.QueryString["x"], ctx.Request.QueryString["y"], ctx.Request.QueryString["sw"], ctx.Request.QueryString["sh"], ctx.Request.QueryString["action"]);
                     byte[] okBuf = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
@@ -1099,6 +1005,14 @@ namespace AetherDesk.Agent
                             reqStream.Write(screenJpeg, 0, screenJpeg.Length);
                         }
                         using (HttpWebResponse resp = (HttpWebResponse)uploadReq.GetResponse()) { }
+
+                        if (lblOnlineStatus != null && lblOnlineStatus.IsHandleCreated)
+                        {
+                            lblOnlineStatus.Invoke(new Action(() => {
+                                lblOnlineStatus.Text = "🟢 Küresel Bulut Aktif";
+                                lblOnlineStatus.ForeColor = Color.FromArgb(52, 211, 153);
+                            }));
+                        }
                     }
                     catch { }
 
@@ -1154,7 +1068,7 @@ namespace AetherDesk.Agent
                     string action = GetRegexVal(obj, "action");
                     if (string.IsNullOrEmpty(action)) continue;
 
-                    if (chkInput.Checked && (action == "click" || action == "rightclick" || action == "dblclick" || action == "move"))
+                    if (allowInput && (action == "click" || action == "rightclick" || action == "dblclick" || action == "move"))
                     {
                         int x = int.Parse(GetRegexVal(obj, "x") ?? "0");
                         int y = int.Parse(GetRegexVal(obj, "y") ?? "0");
@@ -1188,7 +1102,7 @@ namespace AetherDesk.Agent
                             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                         }
                     }
-                    else if (chkInput.Checked && action == "key")
+                    else if (allowInput && action == "key")
                     {
                         string key = GetRegexVal(obj, "key");
                         if (!string.IsNullOrEmpty(key))
@@ -1196,9 +1110,8 @@ namespace AetherDesk.Agent
                             SendKeySafe(key);
                         }
                     }
-                    else if (chkFiles.Checked && action == "incoming_file")
+                    else if (allowFiles && action == "incoming_file")
                     {
-                        // Auto-download incoming transferred file
                         DownloadIncomingFile();
                     }
                 }
@@ -1214,7 +1127,7 @@ namespace AetherDesk.Agent
                 {
                     string cleanId = this.mySessionId.Replace(" ", "");
                     string downloadUrl = CLOUD_RELAY_URL + "/api/file/download/" + cleanId;
-                    
+
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create(downloadUrl);
                     req.Method = "GET";
                     req.Timeout = 15000;
@@ -1331,23 +1244,6 @@ namespace AetherDesk.Agent
                 if (codec.FormatID == format.Guid) return codec;
             }
             return null;
-        }
-
-        private string GetLocalIp()
-        {
-            try
-            {
-                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
-                {
-                    socket.Connect("8.8.8.8", 65530);
-                    IPEndPoint endPoint = socket.LocalEndPoint as IPEndPoint;
-                    return endPoint != null ? endPoint.Address.ToString() : "192.168.1.100";
-                }
-            }
-            catch
-            {
-                return "192.168.1.100";
-            }
         }
     }
 }
