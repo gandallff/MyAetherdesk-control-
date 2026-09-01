@@ -76,7 +76,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 4. Web Viewer sends mouse action (POST /api/mouse/:sessionId)
+  // 4. Web Viewer sends mouse action (GET or POST /api/mouse/:sessionId)
   if (pathname.startsWith('/api/mouse/')) {
     const sessionId = pathname.replace('/api/mouse/', '').replace(/[\s\-]/g, '');
     const x = parseInt(url.searchParams.get('x') || '0', 10);
@@ -89,13 +89,14 @@ const server = http.createServer((req, res) => {
       pendingEvents.set(sessionId, []);
     }
     pendingEvents.get(sessionId)!.push({ x, y, sw, sh, action });
+    console.log(`[Mouse Event Queued] Session: ${sessionId}, Action: ${action}, (${x}, ${y}) / (${sw}, ${sh})`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
+    res.end(JSON.stringify({ ok: true, queueLength: pendingEvents.get(sessionId)!.length }));
     return;
   }
 
-  // 5. Web Viewer sends keyboard key (POST /api/keyboard/:sessionId)
+  // 5. Web Viewer sends keyboard key (GET or POST /api/keyboard/:sessionId)
   if (pathname.startsWith('/api/keyboard/')) {
     const sessionId = pathname.replace('/api/keyboard/', '').replace(/[\s\-]/g, '');
     const key = url.searchParams.get('key') || '';
@@ -105,6 +106,7 @@ const server = http.createServer((req, res) => {
       pendingEvents.set(sessionId, []);
     }
     pendingEvents.get(sessionId)!.push({ x: 0, y: 0, sw: 0, sh: 0, action: 'key', key, text });
+    console.log(`[Keyboard Event Queued] Session: ${sessionId}, Key: ${key}`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));

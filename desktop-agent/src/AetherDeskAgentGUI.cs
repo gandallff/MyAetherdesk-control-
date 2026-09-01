@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -13,9 +14,13 @@ namespace AetherDesk.Agent
 {
     public class Program
     {
+        [DllImport("user32.dll")]
+        static extern bool SetProcessDPIAware();
+
         [STAThread]
         public static void Main(string[] args)
         {
+            try { SetProcessDPIAware(); } catch { }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new AgentMainForm());
@@ -30,10 +35,15 @@ namespace AetherDesk.Agent
         [DllImport("user32.dll")]
         static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
 
-        private const uint MOUSEEVENTF_LEFTDOWN = 0x02;
-        private const uint MOUSEEVENTF_LEFTUP = 0x04;
-        private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
-        private const uint MOUSEEVENTF_RIGHTUP = 0x09;
+        [DllImport("user32.dll")]
+        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+
+        private const uint MOUSEEVENTF_MOVE = 0x0001;
+        private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+        private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+        private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        private const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
 
         private Label lblTitle;
         private Label lblSub;
@@ -72,7 +82,6 @@ namespace AetherDesk.Agent
         private Thread cloudRelayThread;
         private Thread inputPollThread;
         private bool isRunning = true;
-        private bool isConnectedActive = false;
 
         public static string CLOUD_RELAY_URL = "https://myaetherdesk-control.onrender.com";
 
@@ -119,11 +128,11 @@ namespace AetherDesk.Agent
             panelCard.Controls.Add(statusDot);
 
             lblStatus = new Label();
-            lblStatus.Text = "BAGLANTIYA HAZIR (ONLINE)";
+            lblStatus.Text = "BAGLANTI VE KONTROL HAZIR (ONLINE)";
             lblStatus.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
             lblStatus.Location = new Point(36, 12);
-            lblStatus.Size = new Size(250, 18);
+            lblStatus.Size = new Size(300, 18);
             panelCard.Controls.Add(lblStatus);
 
             lblIdTag = new Label();
@@ -160,7 +169,7 @@ namespace AetherDesk.Agent
 
             string localIp = GetLocalIp();
             lblIpInfo = new Label();
-            lblIpInfo.Text = "Yerel IP: " + localIp + ":8443 | Bulut: " + CLOUD_RELAY_URL.Replace("https://", "");
+            lblIpInfo.Text = "Yerel: " + localIp + ":8443 | Bulut: " + CLOUD_RELAY_URL.Replace("https://", "");
             lblIpInfo.Font = new Font("Consolas", 8);
             lblIpInfo.ForeColor = Color.FromArgb(148, 163, 184);
             lblIpInfo.Location = new Point(18, 98);
@@ -212,7 +221,7 @@ namespace AetherDesk.Agent
             chkLockOnDisconnect.Size = new Size(440, 20);
             grpPermissions.Controls.Add(chkLockOnDisconnect);
 
-            // GroupBox: Erişim & Güvenlik Ayarları
+            // GroupBox: Güvenlik ve Şifreleme
             grpAccessSettings = new GroupBox();
             grpAccessSettings.Text = " 🔒 Guvenlik ve Sifreleme ";
             grpAccessSettings.Font = new Font("Segoe UI", 9, FontStyle.Bold);
@@ -276,7 +285,6 @@ namespace AetherDesk.Agent
             btnDisconnectCurrent.Size = new Size(475, 36);
             btnDisconnectCurrent.Cursor = Cursors.Hand;
             btnDisconnectCurrent.Click += (s, e) => {
-                isConnectedActive = false;
                 statusDot.BackColor = Color.FromArgb(52, 211, 153);
                 lblStatus.Text = "BAGLANTIYA HAZIR (ONLINE)";
                 lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
@@ -520,68 +528,85 @@ namespace AetherDesk.Agent
                         using (StreamReader reader = new StreamReader(eventResp.GetResponseStream()))
                         {
                             string json = reader.ReadToEnd();
-                            // Check permission before executing remote control actions
-                            if (chkAllowInput.Checked)
+                            if (chkAllowInput.Checked && !string.IsNullOrEmpty(json) && json.Contains("action"))
                             {
-                                ProcessEventJson(json);
+                                ProcessEventsRobust(json);
                             }
                         }
                     }
                     catch { }
 
-                    Thread.Sleep(80);
+                    Thread.Sleep(60); // High-frequency 60ms polling
                 }
             });
             inputPollThread.IsBackground = true;
             inputPollThread.Start();
         }
 
-        private void ProcessEventJson(string json)
+        private void ProcessEventsRobust(string json)
         {
-            if (string.IsNullOrEmpty(json) || !json.Contains("\"events\"")) return;
-
-            string[] items = json.Split(new string[] { "},{" }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string item in items)
+            try
             {
-                try
+                // Match each JSON object inside events array
+                MatchCollection matches = Regex.Matches(json, @"\{[^{}]*\}");
+                foreach (Match m in matches)
                 {
-                    string action = ExtractJsonValue(item, "action");
-                    int x = int.Parse(ExtractJsonValue(item, "x") ?? "0");
-                    int y = int.Parse(ExtractJsonValue(item, "y") ?? "0");
-                    int sw = int.Parse(ExtractJsonValue(item, "sw") ?? "1920");
-                    int sh = int.Parse(ExtractJsonValue(item, "sh") ?? "1080");
-                    string key = ExtractJsonValue(item, "key");
+                    string obj = m.Value;
+                    string action = GetRegexVal(obj, "action");
+                    if (string.IsNullOrEmpty(action)) continue;
 
                     if (action == "click" || action == "rightclick" || action == "dblclick" || action == "move")
                     {
-                        Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
-                        int realX = (int)((double)x / (sw > 0 ? sw : 1920) * screenBounds.Width);
-                        int realY = (int)((double)y / (sh > 0 ? sh : 1080) * screenBounds.Height);
+                        int x = int.Parse(GetRegexVal(obj, "x") ?? "0");
+                        int y = int.Parse(GetRegexVal(obj, "y") ?? "0");
+                        int sw = int.Parse(GetRegexVal(obj, "sw") ?? "1920");
+                        int sh = int.Parse(GetRegexVal(obj, "sh") ?? "1080");
 
+                        Rectangle bounds = Screen.PrimaryScreen.Bounds;
+                        int realX = (int)((double)x / (sw > 0 ? sw : 1920) * bounds.Width);
+                        int realY = (int)((double)y / (sh > 0 ? sh : 1080) * bounds.Height);
+
+                        // Position cursor
                         SetCursorPos(realX, realY);
 
                         if (action == "click")
                         {
-                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                            Thread.Sleep(20);
+                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                         }
                         else if (action == "rightclick")
                         {
-                            mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, (uint)realX, (uint)realY, 0, 0);
+                            mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0);
+                            Thread.Sleep(20);
+                            mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0);
                         }
                         else if (action == "dblclick")
                         {
-                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
-                            Thread.Sleep(50);
-                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+                            Thread.Sleep(40);
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                         }
                     }
-                    else if (action == "key" && !string.IsNullOrEmpty(key))
+                    else if (action == "key")
                     {
-                        SendKeySafe(key);
+                        string key = GetRegexVal(obj, "key");
+                        if (!string.IsNullOrEmpty(key))
+                        {
+                            SendKeySafe(key);
+                        }
                     }
                 }
-                catch { }
             }
+            catch { }
+        }
+
+        private string GetRegexVal(string json, string key)
+        {
+            Match m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*\"?([^,\"}]+)\"?");
+            return m.Success ? m.Groups[1].Value.Trim() : null;
         }
 
         private void SendKeySafe(string key)
@@ -592,20 +617,13 @@ namespace AetherDesk.Agent
                 else if (key == "Backspace") SendKeys.SendWait("{BACKSPACE}");
                 else if (key == "Tab") SendKeys.SendWait("{TAB}");
                 else if (key == "Escape") SendKeys.SendWait("{ESC}");
+                else if (key == "ArrowUp") SendKeys.SendWait("{UP}");
+                else if (key == "ArrowDown") SendKeys.SendWait("{DOWN}");
+                else if (key == "ArrowLeft") SendKeys.SendWait("{LEFT}");
+                else if (key == "ArrowRight") SendKeys.SendWait("{RIGHT}");
                 else if (key.Length == 1) SendKeys.SendWait(key);
             }
             catch { }
-        }
-
-        private string ExtractJsonValue(string json, string key)
-        {
-            int idx = json.IndexOf("\"" + key + "\":");
-            if (idx == -1) return null;
-            int start = idx + key.Length + 3;
-            if (json[start] == '"') start++;
-            int end = json.IndexOfAny(new char[] { ',', '}', '"' }, start);
-            if (end == -1) end = json.Length;
-            return json.Substring(start, end - start).Trim();
         }
 
         private void ExecuteMouseEvent(string xStr, string yStr, string swStr, string shStr, string act)
@@ -627,11 +645,15 @@ namespace AetherDesk.Agent
 
                     if (act == "click")
                     {
-                        mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                        Thread.Sleep(20);
+                        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                     }
                     else if (act == "rightclick")
                     {
-                        mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, (uint)realX, (uint)realY, 0, 0);
+                        mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0);
+                        Thread.Sleep(20);
+                        mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0);
                     }
                 }
             }
