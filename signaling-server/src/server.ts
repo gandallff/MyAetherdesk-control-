@@ -8,7 +8,7 @@ import { WebSocketHandler } from './websocket_handler';
 
 // In-Memory Cloud Frame & Event Buffer per Session
 const screenBuffers = new Map<string, { buffer: Buffer; updatedAt: number }>();
-const pendingMouseEvents = new Map<string, Array<{ x: number; y: number; sw: number; sh: number; action: string }>>();
+const pendingEvents = new Map<string, Array<{ x: number; y: number; sw: number; sh: number; action: string; key?: string; text?: string }>>();
 const activeSessions = new Map<string, { lastSeen: number; ip: string; mode: string }>();
 
 const server = http.createServer((req, res) => {
@@ -85,33 +85,49 @@ const server = http.createServer((req, res) => {
     const sh = parseInt(url.searchParams.get('sh') || '1080', 10);
     const action = url.searchParams.get('action') || 'click';
 
-    if (!pendingMouseEvents.has(sessionId)) {
-      pendingMouseEvents.set(sessionId, []);
+    if (!pendingEvents.has(sessionId)) {
+      pendingEvents.set(sessionId, []);
     }
-    pendingMouseEvents.get(sessionId)!.push({ x, y, sw, sh, action });
+    pendingEvents.get(sessionId)!.push({ x, y, sw, sh, action });
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
     return;
   }
 
-  // 5. Host Agent polls mouse actions (GET /api/events/:sessionId)
+  // 5. Web Viewer sends keyboard key (POST /api/keyboard/:sessionId)
+  if (pathname.startsWith('/api/keyboard/')) {
+    const sessionId = pathname.replace('/api/keyboard/', '').replace(/[\s\-]/g, '');
+    const key = url.searchParams.get('key') || '';
+    const text = url.searchParams.get('text') || '';
+
+    if (!pendingEvents.has(sessionId)) {
+      pendingEvents.set(sessionId, []);
+    }
+    pendingEvents.get(sessionId)!.push({ x: 0, y: 0, sw: 0, sh: 0, action: 'key', key, text });
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // 6. Host Agent polls pending input events (GET /api/events/:sessionId)
   if (pathname.startsWith('/api/events/')) {
     const sessionId = pathname.replace('/api/events/', '').replace(/[\s\-]/g, '');
-    const events = pendingMouseEvents.get(sessionId) || [];
-    pendingMouseEvents.set(sessionId, []); // drain queue
+    const events = pendingEvents.get(sessionId) || [];
+    pendingEvents.set(sessionId, []); // clear queue
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ events }));
     return;
   }
 
-  // 6. Active Sessions Discovery (GET /api/sessions)
+  // 7. Active Sessions Discovery (GET /api/sessions)
   if (pathname === '/api/sessions') {
     const now = Date.now();
     const list: any[] = [];
     activeSessions.forEach((info, sid) => {
-      if (now - info.lastSeen < 30000) { // Active in last 30s
+      if (now - info.lastSeen < 30000) {
         list.push({ sessionId: sid, ...info });
       }
     });
@@ -120,7 +136,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 7. Direct Agent Downloads
+  // 8. Direct Agent Downloads
   if (pathname === '/download/agent' || pathname === '/download/agent.exe') {
     const pathsToTry = [
       path.join(__dirname, '../../saas-portal/frontend/public/aetherdesk-agent.exe'),

@@ -30,6 +30,9 @@ namespace AetherDesk.Agent
         [DllImport("user32.dll")]
         static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
 
+        [DllImport("user32.dll")]
+        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+
         private const uint MOUSEEVENTF_LEFTDOWN = 0x02;
         private const uint MOUSEEVENTF_LEFTUP = 0x04;
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
@@ -56,9 +59,9 @@ namespace AetherDesk.Agent
         private HttpListener listener;
         private Thread listenThread;
         private Thread cloudRelayThread;
+        private Thread inputPollThread;
         private bool isRunning = true;
 
-        // Configurable Cloud Relay URL (Render Live Endpoint)
         public static string CLOUD_RELAY_URL = "https://myaetherdesk-control.onrender.com";
 
         public AgentMainForm()
@@ -83,7 +86,7 @@ namespace AetherDesk.Agent
             this.Controls.Add(lblTitle);
 
             lblSub = new Label();
-            lblSub.Text = "Bulut ve Yerel Ag Gercek Fiziksel Masaustu Yayini Aktif.";
+            lblSub.Text = "Bulut ve Yerel Ag Gercek Fiziksel Masaustu ve Giris Kontrolu Aktif.";
             lblSub.Font = new Font("Segoe UI", 9);
             lblSub.ForeColor = Color.FromArgb(148, 163, 184);
             lblSub.Location = new Point(30, 52);
@@ -104,7 +107,7 @@ namespace AetherDesk.Agent
             panelCard.Controls.Add(statusDot);
 
             lblStatus = new Label();
-            lblStatus.Text = "BULUT VE YEREL YAYIN HAZIR (ONLINE)";
+            lblStatus.Text = "TAM KONTROL HAZIR (ONLINE)";
             lblStatus.Font = new Font("Segoe UI", 8, FontStyle.Bold);
             lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
             lblStatus.Location = new Point(38, 14);
@@ -145,11 +148,11 @@ namespace AetherDesk.Agent
 
             string localIp = GetLocalIp();
             lblIpInfo = new Label();
-            lblIpInfo.Text = "Yerel IP (LAN): " + localIp + ":8443 | Bulut: Aktif";
-            lblIpInfo.Font = new Font("Consolas", 9);
+            lblIpInfo.Text = "Yerel IP: " + localIp + ":8443 | Bulut: " + CLOUD_RELAY_URL.Replace("https://", "");
+            lblIpInfo.Font = new Font("Consolas", 8.5f);
             lblIpInfo.ForeColor = Color.FromArgb(148, 163, 184);
             lblIpInfo.Location = new Point(20, 115);
-            lblIpInfo.Size = new Size(380, 20);
+            lblIpInfo.Size = new Size(410, 20);
             panelCard.Controls.Add(lblIpInfo);
 
             // GroupBox: Access Settings
@@ -206,7 +209,7 @@ namespace AetherDesk.Agent
             grpAccessSettings.Controls.Add(btnSaveSettings);
 
             Label lblFooter = new Label();
-            lblFooter.Text = "Bu 9 haneli ID'yi yoneticiye iletiniz. Dunyanin her yerinden gercek ekran kontrolu saglanacaktir.";
+            lblFooter.Text = "Bu program acik oldugu surece portaldan fare ve klavye ile tam kontrol saglanir.";
             lblFooter.Font = new Font("Segoe UI", 8.5f);
             lblFooter.ForeColor = Color.FromArgb(100, 116, 139);
             lblFooter.Location = new Point(30, 465);
@@ -216,6 +219,7 @@ namespace AetherDesk.Agent
             LoadSavedAccessSettings();
             StartListener();
             StartCloudRelayThread();
+            StartInputPollThread();
         }
 
         private void LoadSavedAccessSettings()
@@ -344,7 +348,7 @@ namespace AetherDesk.Agent
             catch { }
         }
 
-        // Background Cloud Relay (Pushes Screen to Render & Polls for Remote Mouse Commands)
+        // Screen Video Frame Streamer to Render Cloud
         private void StartCloudRelayThread()
         {
             cloudRelayThread = new Thread(() =>
@@ -356,48 +360,131 @@ namespace AetherDesk.Agent
                 {
                     try
                     {
-                        // 1. Push Latest Screen Frame to Render Cloud
                         byte[] screenJpeg = CaptureRealScreenJpeg();
                         HttpWebRequest uploadReq = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/stream/" + cleanId);
                         uploadReq.Method = "POST";
                         uploadReq.ContentType = "image/jpeg";
                         uploadReq.ContentLength = screenJpeg.Length;
-                        uploadReq.Timeout = 3000;
+                        uploadReq.Timeout = 2000;
 
                         using (Stream reqStream = uploadReq.GetRequestStream())
                         {
                             reqStream.Write(screenJpeg, 0, screenJpeg.Length);
                         }
                         using (HttpWebResponse resp = (HttpWebResponse)uploadReq.GetResponse()) { }
+                    }
+                    catch { }
 
-                        // 2. Poll Mouse Actions from Cloud Queue
+                    Thread.Sleep(300); // Fast live video loop
+                }
+            });
+            cloudRelayThread.IsBackground = true;
+            cloudRelayThread.Start();
+        }
+
+        // Fast Input Polling Thread (Processes Remote Mouse & Keyboard Events from Cloud)
+        private void StartInputPollThread()
+        {
+            inputPollThread = new Thread(() =>
+            {
+                string cleanId = this.mySessionId.Replace(" ", "");
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+                while (isRunning)
+                {
+                    try
+                    {
                         HttpWebRequest eventReq = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/events/" + cleanId);
                         eventReq.Method = "GET";
-                        eventReq.Timeout = 3000;
+                        eventReq.Timeout = 1500;
 
                         using (HttpWebResponse eventResp = (HttpWebResponse)eventReq.GetResponse())
                         using (StreamReader reader = new StreamReader(eventResp.GetResponseStream()))
                         {
                             string json = reader.ReadToEnd();
-                            // Parse simple events if present
-                            if (json.Contains("\"action\":\"click\""))
-                            {
-                                // Execute remote click on real desktop
-                                Point current = Cursor.Position;
-                                mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)current.X, (uint)current.Y, 0, 0);
-                            }
+                            ProcessEventJson(json);
                         }
                     }
-                    catch
-                    {
-                        // Offline or waiting for cloud connection
-                    }
+                    catch { }
 
-                    Thread.Sleep(500); // 2 FPS cloud upload loop
+                    Thread.Sleep(80); // 80ms fast input responsiveness loop
                 }
             });
-            cloudRelayThread.IsBackground = true;
-            cloudRelayThread.Start();
+            inputPollThread.IsBackground = true;
+            inputPollThread.Start();
+        }
+
+        private void ProcessEventJson(string json)
+        {
+            if (string.IsNullOrEmpty(json) || !json.Contains("\"events\"")) return;
+
+            // Simple parser for event objects
+            string[] items = json.Split(new string[] { "},{" }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string item in items)
+            {
+                try
+                {
+                    string action = ExtractJsonValue(item, "action");
+                    int x = int.Parse(ExtractJsonValue(item, "x") ?? "0");
+                    int y = int.Parse(ExtractJsonValue(item, "y") ?? "0");
+                    int sw = int.Parse(ExtractJsonValue(item, "sw") ?? "1920");
+                    int sh = int.Parse(ExtractJsonValue(item, "sh") ?? "1080");
+                    string key = ExtractJsonValue(item, "key");
+
+                    if (action == "click" || action == "rightclick" || action == "dblclick" || action == "move")
+                    {
+                        Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
+                        int realX = (int)((double)x / (sw > 0 ? sw : 1920) * screenBounds.Width);
+                        int realY = (int)((double)y / (sh > 0 ? sh : 1080) * screenBounds.Height);
+
+                        SetCursorPos(realX, realY);
+
+                        if (action == "click")
+                        {
+                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                        }
+                        else if (action == "rightclick")
+                        {
+                            mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, (uint)realX, (uint)realY, 0, 0);
+                        }
+                        else if (action == "dblclick")
+                        {
+                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                            Thread.Sleep(50);
+                            mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                        }
+                    }
+                    else if (action == "key" && !string.IsNullOrEmpty(key))
+                    {
+                        SendKeySafe(key);
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private void SendKeySafe(string key)
+        {
+            try
+            {
+                if (key == "Enter") SendKeys.SendWait("{ENTER}");
+                else if (key == "Backspace") SendKeys.SendWait("{BACKSPACE}");
+                else if (key == "Tab") SendKeys.SendWait("{TAB}");
+                else if (key == "Escape") SendKeys.SendWait("{ESC}");
+                else if (key.Length == 1) SendKeys.SendWait(key);
+            }
+            catch { }
+        }
+
+        private string ExtractJsonValue(string json, string key)
+        {
+            int idx = json.IndexOf("\"" + key + "\":");
+            if (idx == -1) return null;
+            int start = idx + key.Length + 3;
+            if (json[start] == '"') start++;
+            int end = json.IndexOfAny(new char[] { ',', '}', '"' }, start);
+            if (end == -1) end = json.Length;
+            return json.Substring(start, end - start).Trim();
         }
 
         private void ExecuteMouseEvent(string xStr, string yStr, string swStr, string shStr, string act)
@@ -420,6 +507,10 @@ namespace AetherDesk.Agent
                     if (act == "click")
                     {
                         mouse_event(MOUSEEVENTF_LEFTDOWN | MOUSEEVENTF_LEFTUP, (uint)realX, (uint)realY, 0, 0);
+                    }
+                    else if (act == "rightclick")
+                    {
+                        mouse_event(MOUSEEVENTF_RIGHTDOWN | MOUSEEVENTF_RIGHTUP, (uint)realX, (uint)realY, 0, 0);
                     }
                 }
             }

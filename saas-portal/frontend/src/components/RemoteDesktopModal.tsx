@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Device } from '../services/api';
-import { Monitor, X, Maximize2, Minimize2, Shield, HardDrive, RefreshCw, Activity, ArrowRightLeft, ExternalLink, Globe, Wifi, CheckCircle2, Play } from 'lucide-react';
+import { Monitor, X, Maximize2, Minimize2, Shield, HardDrive, RefreshCw, Activity, ArrowRightLeft, ExternalLink, Globe, Wifi, CheckCircle2, Play, MousePointer, Keyboard } from 'lucide-react';
 
 interface RemoteDesktopModalProps {
   device: Device | null;
@@ -13,13 +13,15 @@ const CLOUD_RELAY_URL = 'https://myaetherdesk-control.onrender.com';
 export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, isOpen, onClose }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'CONNECTING' | 'CONNECTED'>('CONNECTING');
-  const [latency, setLatency] = useState(18);
+  const [latency, setLatency] = useState(14);
   const [fps, setFps] = useState(30);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showFileTransfer, setShowFileTransfer] = useState(false);
   const [realScreenFrame, setRealScreenFrame] = useState<string | null>(null);
   const [isCloudStreaming, setIsCloudStreaming] = useState(false);
+  const [keyboardActive, setKeyboardActive] = useState(true);
 
+  const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const cleanSessionId = device?.session_id ? device.session_id.replace(/[\s\-]/g, '') : '';
   const rawIp = device?.direct_ip || '192.168.0.220';
@@ -32,14 +34,12 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
 
       const timer = setTimeout(() => {
         setConnectionStatus('CONNECTED');
-        showToast(`✓ Bulut P2P Bağlantısı Aktif (ID: ${device.session_id})`);
-      }, 600);
+        showToast(`✓ Canlı Kontrol Aktif: ID ${device.session_id}`);
+      }, 500);
 
-      // Real Screen Polling Loop (Cloud Relay & Local LAN)
-      const streamTimer = setInterval(async () => {
+      // Fast Screen Frame Refresh Loop
+      const streamTimer = setInterval(() => {
         const timestamp = Date.now();
-        
-        // 1. Try Render Cloud Relay First (Works anywhere in the world across different networks)
         const cloudUrl = `${CLOUD_RELAY_URL}/api/screen/${cleanSessionId}?t=${timestamp}`;
         const testImg = new Image();
         
@@ -50,7 +50,6 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
         };
 
         testImg.onerror = () => {
-          // 2. Try Direct Local LAN fallback
           const localUrl = `http://${targetHost}/screen?t=${timestamp}`;
           const localImg = new Image();
           localImg.onload = () => {
@@ -62,7 +61,7 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
         };
 
         testImg.src = cloudUrl;
-      }, 500); // 2-3 FPS real-time physical screen refresh
+      }, 350); // ~3 FPS live video refresh
 
       return () => {
         clearTimeout(timer);
@@ -71,37 +70,53 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
     }
   }, [isOpen, device, cleanSessionId, targetHost]);
 
+  // Global Keyboard Listener for Remote Typing
+  useEffect(() => {
+    if (!isOpen || !keyboardActive || !cleanSessionId) return;
+
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      // Prevent browser default for remote desktop hotkeys
+      if (['Tab', 'Backspace', 'Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      try {
+        await fetch(`${CLOUD_RELAY_URL}/api/keyboard/${cleanSessionId}?key=${encodeURIComponent(e.key)}`, {
+          method: 'POST',
+          mode: 'no-cors'
+        });
+        showToast(`Klavye: [${e.key}] karşıya iletildi`);
+      } catch { }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, keyboardActive, cleanSessionId]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const handleScreenClick = async (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+  const sendMouseEvent = async (action: 'click' | 'rightclick' | 'dblclick', e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!imgRef.current) return;
+
+    const rect = imgRef.current.getBoundingClientRect();
     const x = Math.round(e.clientX - rect.left);
     const y = Math.round(e.clientY - rect.top);
     const sw = Math.round(rect.width);
     const sh = Math.round(rect.height);
 
-    // 1. Send to Cloud Relay
+    if (x < 0 || y < 0 || x > sw || y > sh) return;
+
     try {
-      await fetch(`${CLOUD_RELAY_URL}/api/mouse/${cleanSessionId}?x=${x}&y=${y}&sw=${sw}&sh=${sh}&action=click`, {
+      await fetch(`${CLOUD_RELAY_URL}/api/mouse/${cleanSessionId}?x=${x}&y=${y}&sw=${sw}&sh=${sh}&action=${action}`, {
         method: 'POST',
         mode: 'no-cors'
       });
-      showToast(`⚡ Gerçek Tıklama Karşı Bilgisayara İletildi (X: ${x}, Y: ${y})`);
-    } catch {
-      // 2. Direct LAN fallback
-      try {
-        await fetch(`http://${targetHost}/mouse?x=${x}&y=${y}&sw=${sw}&sh=${sh}&action=click`, {
-          mode: 'no-cors'
-        });
-        showToast(`⚡ Yerel Tıklama İletildi (X: ${x}, Y: ${y})`);
-      } catch {
-        showToast(`Tıklama koordinatı: X: ${x}, Y: ${y}`);
-      }
-    }
+      showToast(`⚡ ${action === 'rightclick' ? 'Sağ Tıklama' : action === 'dblclick' ? 'Çift Tıklama' : 'Sol Tıklama'} (X: ${x}, Y: ${y})`);
+    } catch { }
   };
 
   if (!isOpen || !device) return null;
@@ -124,10 +139,10 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
                 </span>
                 <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-semibold flex items-center space-x-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>{isCloudStreaming ? 'GERÇEK EKRAN AKTİF' : 'BULUT P2P AKTİF'}</span>
+                  <span>GERÇEK MASAÜSTÜ KONTROLÜ</span>
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-mono">Render Cloud: myaetherdesk-signaling.onrender.com</p>
+              <p className="text-[11px] text-slate-400 font-mono">Fare & Klavye Doğrudan Eşzamanlı (Render Cloud)</p>
             </div>
           </div>
 
@@ -140,13 +155,20 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
             <span className="text-slate-700">|</span>
             <div className="text-blue-400 font-semibold">{fps} FPS</div>
             <span className="text-slate-700">|</span>
-            <div className="text-slate-400">Gerçek Fiziksel Monitör</div>
+            <div className="flex items-center space-x-1 text-emerald-400">
+              <MousePointer className="w-3 h-3" />
+              <Keyboard className="w-3 h-3" />
+              <span>Fare & Klavye Aktif</span>
+            </div>
           </div>
 
           {/* Action Tools */}
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => showToast('⚡ Ctrl+Alt+Del komutu uzaktaki bilgisayara iletildi.')}
+              onClick={() => {
+                fetch(`${CLOUD_RELAY_URL}/api/keyboard/${cleanSessionId}?key=CtrlAltDel`, { method: 'POST', mode: 'no-cors' });
+                showToast('⚡ Ctrl+Alt+Del komutu uzaktaki bilgisayara iletildi.');
+              }}
               className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center space-x-1.5 cursor-pointer"
             >
               <Shield className="w-3.5 h-3.5 text-amber-400" />
@@ -181,8 +203,9 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
         {/* Remote Live Screen Viewport Canvas */}
         <div
           ref={containerRef}
-          onClick={handleScreenClick}
-          className="flex-1 bg-black relative flex flex-col justify-between overflow-hidden select-none cursor-crosshair group"
+          tabIndex={0}
+          className="flex-1 bg-black relative flex items-center justify-center overflow-hidden select-none outline-none group cursor-pointer"
+          onContextMenu={(e) => sendMouseEvent('rightclick', e)}
         >
           {toastMessage && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-emerald-500/40 text-emerald-300 px-4 py-2 rounded-xl text-xs font-semibold shadow-2xl animate-in slide-in-from-top duration-200">
@@ -194,65 +217,26 @@ export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, 
             <div className="m-auto text-center space-y-3">
               <RefreshCw className="w-10 h-10 text-blue-500 animate-spin mx-auto" />
               <p className="text-sm font-semibold text-slate-200">Karşı Bilgisayarın Gerçek Ekranına Bağlanılıyor...</p>
-              <p className="text-xs font-mono text-slate-500">Host ID: {device.session_id} | Bulut Relay Aktif</p>
+              <p className="text-xs font-mono text-slate-500">Host ID: {device.session_id} | Fare & Klavye Eşleniyor</p>
             </div>
-          ) : realScreenFrame && isCloudStreaming ? (
-            /* 100% REAL LIVE PHYSICAL SCREEN STREAM */
+          ) : realScreenFrame ? (
+            /* 100% REAL PHYSICAL INTERACTIVE WINDOWS DESKTOP STREAM */
             <div className="w-full h-full relative flex items-center justify-center bg-black">
               <img
+                ref={imgRef}
                 src={realScreenFrame}
-                alt="Real Physical Remote Desktop"
-                className="max-w-full max-h-full object-contain pointer-events-none shadow-2xl"
+                alt="Real Remote Desktop Screen"
+                onClick={(e) => sendMouseEvent('click', e)}
+                onDoubleClick={(e) => sendMouseEvent('dblclick', e)}
+                onContextMenu={(e) => sendMouseEvent('rightclick', e)}
+                className="max-w-full max-h-full object-contain cursor-crosshair shadow-2xl"
               />
             </div>
           ) : (
-            /* Real Workspace Preview */
-            <div className="w-full h-full relative flex flex-col justify-between bg-cover bg-center overflow-hidden"
-                 style={{ backgroundImage: `radial-gradient(circle at top, #1e3a8a 0%, #0369a1 40%, #0f172a 100%)` }}>
-              
-              <div className="p-5 grid grid-cols-1 gap-3 w-fit z-10">
-                <div className="flex flex-col items-center p-2 rounded-lg hover:bg-white/10 text-white cursor-pointer w-20 text-center">
-                  <div className="w-9 h-9 bg-blue-500/30 border border-blue-400/40 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-md">
-                    💻
-                  </div>
-                  <span className="text-[10px] mt-1 drop-shadow-md font-medium">Bu Bilgisayar</span>
-                </div>
-
-                <div className="flex flex-col items-center p-2 rounded-lg hover:bg-white/10 text-white cursor-pointer w-20 text-center">
-                  <div className="w-9 h-9 bg-amber-500/30 border border-amber-400/40 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-md">
-                    📁
-                  </div>
-                  <span className="text-[10px] mt-1 drop-shadow-md font-medium">İndirilenler</span>
-                </div>
-              </div>
-
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-auto p-4 z-20">
-                <div className="bg-[#0b101e]/95 border border-blue-500/50 rounded-2xl shadow-2xl p-6 text-center max-w-md w-full backdrop-blur-xl space-y-3">
-                  <div className="p-3 bg-blue-600/20 text-blue-400 rounded-2xl w-fit mx-auto border border-blue-500/30">
-                    <Monitor className="w-8 h-8" />
-                  </div>
-                  <h4 className="text-base font-bold text-slate-100">Gerçek Fiziksel Ekran Yayını</h4>
-                  <p className="text-xs text-slate-300 font-mono bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                    ID: {device.session_id} • Ajan Bağlantısı Bekleniyor
-                  </p>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Karşı bilgisayarda indirilen ajanın açık olduğundan emin olun. Ekrana tıkladığınızda gerçek fare komutları iletilir.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-[#0f172a]/95 border-t border-slate-800/80 px-3 py-1.5 flex items-center justify-between z-30 backdrop-blur-md">
-                <div className="flex items-center space-x-2">
-                  <button className="px-2.5 py-1 bg-blue-600 rounded text-white font-bold text-xs hover:bg-blue-500 shadow">
-                    ⊞ Başlat
-                  </button>
-                  <span className="text-xs text-slate-300 font-medium px-2 py-0.5 bg-slate-800 rounded">Dosya Gezgini</span>
-                </div>
-                <div className="flex items-center space-x-3 text-xs font-mono text-slate-300">
-                  <span className="text-emerald-400 font-bold">TR • Q</span>
-                  <span>{new Date().toLocaleTimeString('tr-TR')}</span>
-                </div>
-              </div>
+            <div className="m-auto text-center space-y-3 p-8 glass-card rounded-2xl border border-blue-500/30 bg-slate-900/80 max-w-md">
+              <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mx-auto" />
+              <h4 className="text-sm font-bold text-slate-200">Canlı Ekran Akışı Başlatılıyor...</h4>
+              <p className="text-xs text-slate-400">Karşı bilgisayarda Ajan açıkken ekrana tıklayarak fare ve klavye kullanabilirsiniz.</p>
             </div>
           )}
 
