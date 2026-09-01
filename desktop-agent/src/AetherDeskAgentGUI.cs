@@ -40,9 +40,9 @@ namespace AetherDesk.Agent
         static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
 
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
-        private const uint MOUSEEVENTF_LEFTUP = 0x0004;
-        private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
-        private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        private const uint MOUSEEVENTF_LEFTUP = 0x04;
+        private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
+        private const uint MOUSEEVENTF_RIGHTUP = 0x10;
 
         // Header & Body Panels
         private Panel pnlHeader;
@@ -127,7 +127,6 @@ namespace AetherDesk.Agent
             pnlHeader.Padding = new Padding(12, 0, 16, 0);
             this.Controls.Add(pnlHeader);
 
-            // Hamburger ☰ Button
             btnHamburger = new Button();
             btnHamburger.Text = "☰";
             btnHamburger.Font = new Font("Segoe UI", 13, FontStyle.Bold);
@@ -416,7 +415,7 @@ namespace AetherDesk.Agent
             pageRemoteConnect.Controls.Add(lblH);
 
             Label lblSub = new Label();
-            lblSub.Text = "Karşı bilgisayarın 9 haneli ID'sini girerek doğrudan kontrol edin.";
+            lblSub.Text = "Karşı bilgisayarın 9 haneli ID'sini girerek doğrudan kontrol penceresini açın.";
             lblSub.Font = new Font("Segoe UI", 9);
             lblSub.ForeColor = Color.FromArgb(148, 163, 184);
             lblSub.Location = new Point(0, 26);
@@ -451,7 +450,7 @@ namespace AetherDesk.Agent
                 string target = txtTargetId.Text.Trim();
                 if (!string.IsNullOrEmpty(target))
                 {
-                    System.Diagnostics.Process.Start("https://my-aetherdesk-control.vercel.app/?connect=" + target.Replace(" ", ""));
+                    LaunchNativeRemoteViewer(target.Replace(" ", ""));
                 }
             };
             pnlBox.Controls.Add(btnConnectTarget);
@@ -473,6 +472,20 @@ namespace AetherDesk.Agent
             AddRecentCard("778 375 604", "Ofis Bilgisayarı", "14 ms");
             AddRecentCard("482 910 375", "Ana Sunucu", "20 ms");
             AddRecentCard("891 204 153", "Muhasebe Terminali", "18 ms");
+        }
+
+        // DIRECT BUILT-IN NATIVE REMOTE DESKTOP VIEWER WINDOW
+        private void LaunchNativeRemoteViewer(string targetSessionId)
+        {
+            try
+            {
+                RemoteViewerForm viewer = new RemoteViewerForm(targetSessionId);
+                viewer.Show();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Oturum açılamadı: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void AddRecentCard(string id, string name, string ping)
@@ -509,7 +522,7 @@ namespace AetherDesk.Agent
 
             card.Click += (s, e) => {
                 txtTargetId.Text = id.Replace(" ", "");
-                System.Diagnostics.Process.Start("https://my-aetherdesk-control.vercel.app/?connect=" + id.Replace(" ", ""));
+                LaunchNativeRemoteViewer(id.Replace(" ", ""));
             };
 
             pnlRecentFlow.Controls.Add(card);
@@ -995,6 +1008,180 @@ namespace AetherDesk.Agent
             {
                 return "192.168.1.100";
             }
+        }
+    }
+
+    // BUILT-IN NATIVE REMOTE DESKTOP VIEWER FORM (LIKE ANYDESK NATIVE WINDOW)
+    public class RemoteViewerForm : Form
+    {
+        private string targetId;
+        private PictureBox picViewport;
+        private Panel pnlTopBar;
+        private Label lblSessionInfo;
+        private Button btnDisconnect;
+        private Button btnCtrlAltDel;
+        private Thread streamThread;
+        private bool isStreaming = true;
+
+        public RemoteViewerForm(string targetSessionId)
+        {
+            this.targetId = targetSessionId;
+            this.Text = "AetherDesk Canlı Uzak Oturum — ID: " + targetSessionId;
+            this.Size = new Size(1100, 720);
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.BackColor = Color.Black;
+            this.DoubleBuffered = true;
+
+            pnlTopBar = new Panel();
+            pnlTopBar.Dock = DockStyle.Top;
+            pnlTopBar.Height = 44;
+            pnlTopBar.BackColor = Color.FromArgb(15, 23, 42);
+            pnlTopBar.Padding = new Padding(12, 6, 12, 6);
+            this.Controls.Add(pnlTopBar);
+
+            lblSessionInfo = new Label();
+            lblSessionInfo.Text = "⚡ Canlı Oturum: " + targetSessionId + "  (Doğrudan Masaüstü)";
+            lblSessionInfo.Font = new Font("Segoe UI", 10, FontStyle.Bold);
+            lblSessionInfo.ForeColor = Color.FromArgb(56, 189, 248);
+            lblSessionInfo.Location = new Point(14, 12);
+            lblSessionInfo.AutoSize = true;
+            pnlTopBar.Controls.Add(lblSessionInfo);
+
+            btnCtrlAltDel = new Button();
+            btnCtrlAltDel.Text = "🛡️ Ctrl+Alt+Del";
+            btnCtrlAltDel.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnCtrlAltDel.ForeColor = Color.White;
+            btnCtrlAltDel.BackColor = Color.FromArgb(30, 41, 59);
+            btnCtrlAltDel.FlatStyle = FlatStyle.Flat;
+            btnCtrlAltDel.FlatAppearance.BorderSize = 0;
+            btnCtrlAltDel.Size = new Size(115, 30);
+            btnCtrlAltDel.Location = new Point(810, 7);
+            btnCtrlAltDel.Cursor = Cursors.Hand;
+            btnCtrlAltDel.Click += (s, e) => SendRemoteKey("CtrlAltDel");
+            pnlTopBar.Controls.Add(btnCtrlAltDel);
+
+            btnDisconnect = new Button();
+            btnDisconnect.Text = "✕ Oturumu Kapat";
+            btnDisconnect.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnDisconnect.ForeColor = Color.White;
+            btnDisconnect.BackColor = Color.FromArgb(225, 29, 72);
+            btnDisconnect.FlatStyle = FlatStyle.Flat;
+            btnDisconnect.FlatAppearance.BorderSize = 0;
+            btnDisconnect.Size = new Size(130, 30);
+            btnDisconnect.Location = new Point(935, 7);
+            btnDisconnect.Cursor = Cursors.Hand;
+            btnDisconnect.Click += (s, e) => { isStreaming = false; this.Close(); };
+            pnlTopBar.Controls.Add(btnDisconnect);
+
+            picViewport = new PictureBox();
+            picViewport.Dock = DockStyle.Fill;
+            picViewport.SizeMode = PictureBoxSizeMode.Zoom;
+            picViewport.BackColor = Color.Black;
+            picViewport.Cursor = Cursors.Cross;
+            this.Controls.Add(picViewport);
+            picViewport.BringToFront();
+
+            // Native Mouse Event Interceptors
+            picViewport.MouseClick += (s, e) => {
+                string action = e.Button == MouseButtons.Right ? "rightclick" : "click";
+                SendRemoteMouse(e.X, e.Y, picViewport.Width, picViewport.Height, action);
+            };
+            picViewport.MouseDoubleClick += (s, e) => {
+                SendRemoteMouse(e.X, e.Y, picViewport.Width, picViewport.Height, "dblclick");
+            };
+
+            // Native Keyboard Listener
+            this.KeyPreview = true;
+            this.KeyDown += (s, e) => {
+                SendRemoteKey(e.KeyCode.ToString());
+            };
+
+            StartStreamLoop();
+        }
+
+        private void StartStreamLoop()
+        {
+            streamThread = new Thread(() =>
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                while (isStreaming)
+                {
+                    try
+                    {
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(AetherDeskAppForm.CLOUD_RELAY_URL + "/api/screen/" + targetId);
+                        req.Method = "GET";
+                        req.Timeout = 2000;
+
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                        using (Stream s = resp.GetResponseStream())
+                        using (MemoryStream ms = new MemoryStream())
+                        {
+                            s.CopyTo(ms);
+                            byte[] imgBytes = ms.ToArray();
+                            if (imgBytes.Length > 0)
+                            {
+                                using (MemoryStream mem = new MemoryStream(imgBytes))
+                                {
+                                    Image img = Image.FromStream(mem);
+                                    if (picViewport.IsHandleCreated)
+                                    {
+                                        picViewport.Invoke(new Action(() => {
+                                            Image old = picViewport.Image;
+                                            picViewport.Image = new Bitmap(img);
+                                            if (old != null) old.Dispose();
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    Thread.Sleep(200); // 5 FPS smooth native stream loop
+                }
+            });
+            streamThread.IsBackground = true;
+            streamThread.Start();
+        }
+
+        private void SendRemoteMouse(int x, int y, int sw, int sh, string action)
+        {
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string url = string.Format("{0}/api/mouse/{1}?x={2}&y={3}&sw={4}&sh={5}&action={6}",
+                        AetherDeskAppForm.CLOUD_RELAY_URL, targetId, x, y, sw, sh, action);
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = "GET";
+                    req.Timeout = 1500;
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                }
+                catch { }
+            });
+        }
+
+        private void SendRemoteKey(string key)
+        {
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string url = string.Format("{0}/api/keyboard/{1}?key={2}",
+                        AetherDeskAppForm.CLOUD_RELAY_URL, targetId, Uri.EscapeDataString(key));
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = "GET";
+                    req.Timeout = 1500;
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                }
+                catch { }
+            });
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            isStreaming = false;
+            base.OnFormClosing(e);
         }
     }
 }
