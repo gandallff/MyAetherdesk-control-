@@ -58,8 +58,8 @@ namespace AetherDesk.Agent
         private Thread cloudRelayThread;
         private bool isRunning = true;
 
-        // Configurable Cloud Relay URL (Render / Public Cloud)
-        public static string CLOUD_RELAY_URL = "https://myaetherdesk-signaling.onrender.com";
+        // Configurable Cloud Relay URL (Render Live Endpoint)
+        public static string CLOUD_RELAY_URL = "https://myaetherdesk-control.onrender.com";
 
         public AgentMainForm()
         {

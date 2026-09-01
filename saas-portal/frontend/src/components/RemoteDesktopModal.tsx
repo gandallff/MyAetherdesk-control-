@@ -8,7 +8,7 @@ interface RemoteDesktopModalProps {
   onClose: () => void;
 }
 
-const CLOUD_RELAY_URL = 'https://myaetherdesk-signaling.onrender.com';
+const CLOUD_RELAY_URL = 'https://myaetherdesk-control.onrender.com';
 
 export const RemoteDesktopModal: React.FC<RemoteDesktopModalProps> = ({ device, isOpen, onClose }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
