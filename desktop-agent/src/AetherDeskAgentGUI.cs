@@ -57,6 +57,7 @@ namespace AetherDesk.Agent
         // Navigation Buttons
         private Button btnNavMyDevice;
         private Button btnNavRemoteConnect;
+        private Button btnNavActiveSession;
         private Button btnNavSecurity;
         private Button btnNavSettings;
 
@@ -66,17 +67,21 @@ namespace AetherDesk.Agent
         private Panel pageSecurity;
         private Panel pageSettings;
 
-        // In-App Unified Remote Viewer (Single-Window Experience)
+        // In-App Unified Remote Viewer
         private Panel pageActiveSession;
         private PictureBox picSessionViewport;
         private Panel pnlSessionTopBar;
         private Label lblSessionTargetInfo;
+        private Label lblSessionDuration;
         private Button btnCloseSession;
         private Button btnSessionCtrlAltDel;
+        private Button btnSessionSendFile;
         private Button btnSessionFullscreen;
         private Thread inAppStreamThread;
         private bool isInAppStreaming = false;
         private string activeConnectedId = "";
+        private DateTime sessionStartTime;
+        private System.Windows.Forms.Timer sessionTimer;
 
         // Page 1 Controls
         private Label lblIdText;
@@ -113,14 +118,18 @@ namespace AetherDesk.Agent
             this.mySessionId = GetOrCreateUniqueSessionId();
 
             this.Text = "AetherDesk Enterprise 2026";
-            this.Size = new Size(920, 640);
-            this.MinimumSize = new Size(840, 560);
+            this.Size = new Size(960, 680);
+            this.MinimumSize = new Size(860, 580);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.BackColor = Color.FromArgb(7, 11, 20);
             this.ForeColor = Color.FromArgb(241, 245, 249);
             this.Font = new Font("Segoe UI", 9.5f);
             this.DoubleBuffered = true;
+
+            sessionTimer = new System.Windows.Forms.Timer();
+            sessionTimer.Interval = 1000;
+            sessionTimer.Tick += (s, e) => UpdateSessionTimer();
 
             BuildAppStructure();
             LoadSettings();
@@ -161,7 +170,7 @@ namespace AetherDesk.Agent
             pnlHeader.Controls.Add(lblAppTitle);
 
             pnlHeaderStatus = new Panel();
-            pnlHeaderStatus.Location = new Point(620, 11);
+            pnlHeaderStatus.Location = new Point(660, 11);
             pnlHeaderStatus.Size = new Size(260, 32);
             pnlHeaderStatus.BackColor = Color.FromArgb(10, 15, 29);
             pnlHeaderStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -197,18 +206,25 @@ namespace AetherDesk.Agent
             // 3. COLLAPSIBLE SIDEBAR
             pnlSidebar = new Panel();
             pnlSidebar.Dock = DockStyle.Left;
-            pnlSidebar.Width = 210;
+            pnlSidebar.Width = 220;
             pnlSidebar.BackColor = Color.FromArgb(11, 17, 32);
             pnlSidebar.Padding = new Padding(8, 12, 8, 12);
             pnlBody.Controls.Add(pnlSidebar);
 
             btnNavMyDevice = CreateSidebarItem("🖥️  Bu Bilgisayarım", 10, (s, e) => ShowPage(pageMyDevice, btnNavMyDevice));
             btnNavRemoteConnect = CreateSidebarItem("🚀  Uzak Bağlantı", 60, (s, e) => ShowPage(pageRemoteConnect, btnNavRemoteConnect));
-            btnNavSecurity = CreateSidebarItem("🔒  Güvenlik & Yetki", 110, (s, e) => ShowPage(pageSecurity, btnNavSecurity));
-            btnNavSettings = CreateSidebarItem("⚙️  Ayarlar & Ağ", 160, (s, e) => ShowPage(pageSettings, btnNavSettings));
+            
+            // Dynamic Active Session Tab Button
+            btnNavActiveSession = CreateSidebarItem("🟢  Canlı Oturum (Aktif)", 110, (s, e) => ShowPage(pageActiveSession, btnNavActiveSession));
+            btnNavActiveSession.Visible = false;
+            btnNavActiveSession.ForeColor = Color.FromArgb(52, 211, 153);
+
+            btnNavSecurity = CreateSidebarItem("🔒  Güvenlik & Yetki", 160, (s, e) => ShowPage(pageSecurity, btnNavSecurity));
+            btnNavSettings = CreateSidebarItem("⚙️  Ayarlar & Ağ", 210, (s, e) => ShowPage(pageSettings, btnNavSettings));
 
             pnlSidebar.Controls.Add(btnNavMyDevice);
             pnlSidebar.Controls.Add(btnNavRemoteConnect);
+            pnlSidebar.Controls.Add(btnNavActiveSession);
             pnlSidebar.Controls.Add(btnNavSecurity);
             pnlSidebar.Controls.Add(btnNavSettings);
 
@@ -241,7 +257,7 @@ namespace AetherDesk.Agent
             btn.Text = title;
             btn.Top = top;
             btn.Left = 8;
-            btn.Width = 194;
+            btn.Width = 204;
             btn.Height = 44;
             btn.FlatStyle = FlatStyle.Flat;
             btn.FlatAppearance.BorderSize = 0;
@@ -257,30 +273,29 @@ namespace AetherDesk.Agent
 
         private void ShowPage(Panel targetPage, Button activeBtn)
         {
-            // Stop in-app remote stream if navigating away
-            if (targetPage != pageActiveSession)
-            {
-                isInAppStreaming = false;
-                pnlHeader.Visible = true;
-            }
-
             pageMyDevice.Visible = false;
             pageRemoteConnect.Visible = false;
             pageSecurity.Visible = false;
             pageSettings.Visible = false;
             pageActiveSession.Visible = false;
 
+            btnNavMyDevice.BackColor = Color.Transparent;
+            btnNavMyDevice.ForeColor = Color.FromArgb(203, 213, 225);
+            btnNavRemoteConnect.BackColor = Color.Transparent;
+            btnNavRemoteConnect.ForeColor = Color.FromArgb(203, 213, 225);
+            btnNavSecurity.BackColor = Color.Transparent;
+            btnNavSecurity.ForeColor = Color.FromArgb(203, 213, 225);
+            btnNavSettings.BackColor = Color.Transparent;
+            btnNavSettings.ForeColor = Color.FromArgb(203, 213, 225);
+
+            if (isInAppStreaming)
+            {
+                btnNavActiveSession.BackColor = Color.Transparent;
+                btnNavActiveSession.ForeColor = Color.FromArgb(52, 211, 153);
+            }
+
             if (activeBtn != null)
             {
-                btnNavMyDevice.BackColor = Color.Transparent;
-                btnNavMyDevice.ForeColor = Color.FromArgb(203, 213, 225);
-                btnNavRemoteConnect.BackColor = Color.Transparent;
-                btnNavRemoteConnect.ForeColor = Color.FromArgb(203, 213, 225);
-                btnNavSecurity.BackColor = Color.Transparent;
-                btnNavSecurity.ForeColor = Color.FromArgb(203, 213, 225);
-                btnNavSettings.BackColor = Color.Transparent;
-                btnNavSettings.ForeColor = Color.FromArgb(203, 213, 225);
-
                 activeBtn.BackColor = Color.FromArgb(30, 41, 59);
                 activeBtn.ForeColor = Color.FromArgb(56, 189, 248);
             }
@@ -314,7 +329,7 @@ namespace AetherDesk.Agent
 
             Panel pnlIdBox = new Panel();
             pnlIdBox.Location = new Point(0, 56);
-            pnlIdBox.Size = new Size(620, 115);
+            pnlIdBox.Size = new Size(660, 115);
             pnlIdBox.BackColor = Color.FromArgb(15, 23, 42);
             pnlIdBox.Paint += (s, e) => {
                 using (Pen p = new Pen(Color.FromArgb(56, 189, 248), 1.5f))
@@ -347,7 +362,7 @@ namespace AetherDesk.Agent
             btnCopyId.BackColor = Color.FromArgb(37, 99, 235);
             btnCopyId.FlatStyle = FlatStyle.Flat;
             btnCopyId.FlatAppearance.BorderSize = 0;
-            btnCopyId.Location = new Point(440, 36);
+            btnCopyId.Location = new Point(480, 36);
             btnCopyId.Size = new Size(160, 42);
             btnCopyId.Cursor = Cursors.Hand;
             btnCopyId.Click += (s, e) => {
@@ -371,7 +386,7 @@ namespace AetherDesk.Agent
             grpPerms.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             grpPerms.ForeColor = Color.FromArgb(56, 189, 248);
             grpPerms.Location = new Point(0, 185);
-            grpPerms.Size = new Size(620, 130);
+            grpPerms.Size = new Size(660, 130);
             pageMyDevice.Controls.Add(grpPerms);
 
             chkInput = new CheckBox();
@@ -380,7 +395,7 @@ namespace AetherDesk.Agent
             chkInput.Font = new Font("Segoe UI", 9);
             chkInput.ForeColor = Color.FromArgb(241, 245, 249);
             chkInput.Location = new Point(18, 26);
-            chkInput.Size = new Size(560, 24);
+            chkInput.Size = new Size(600, 24);
             chkInput.CheckedChanged += (s, e) => SavePermissions();
             grpPerms.Controls.Add(chkInput);
 
@@ -390,7 +405,7 @@ namespace AetherDesk.Agent
             chkFiles.Font = new Font("Segoe UI", 9);
             chkFiles.ForeColor = Color.FromArgb(241, 245, 249);
             chkFiles.Location = new Point(18, 56);
-            chkFiles.Size = new Size(560, 24);
+            chkFiles.Size = new Size(600, 24);
             chkFiles.CheckedChanged += (s, e) => SavePermissions();
             grpPerms.Controls.Add(chkFiles);
 
@@ -400,7 +415,7 @@ namespace AetherDesk.Agent
             chkClipboard.Font = new Font("Segoe UI", 9);
             chkClipboard.ForeColor = Color.FromArgb(241, 245, 249);
             chkClipboard.Location = new Point(18, 86);
-            chkClipboard.Size = new Size(560, 24);
+            chkClipboard.Size = new Size(600, 24);
             chkClipboard.CheckedChanged += (s, e) => SavePermissions();
             grpPerms.Controls.Add(chkClipboard);
 
@@ -412,7 +427,7 @@ namespace AetherDesk.Agent
             btnDisconnect.FlatStyle = FlatStyle.Flat;
             btnDisconnect.FlatAppearance.BorderSize = 0;
             btnDisconnect.Location = new Point(0, 330);
-            btnDisconnect.Size = new Size(620, 38);
+            btnDisconnect.Size = new Size(660, 38);
             btnDisconnect.Cursor = Cursors.Hand;
             btnDisconnect.Click += (s, e) => {
                 MessageBox.Show("Uzak oturum sonlandırıldı.", "AetherDesk Enterprise", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -445,7 +460,7 @@ namespace AetherDesk.Agent
 
             Panel pnlBox = new Panel();
             pnlBox.Location = new Point(0, 56);
-            pnlBox.Size = new Size(620, 65);
+            pnlBox.Size = new Size(660, 65);
             pnlBox.BackColor = Color.FromArgb(15, 23, 42);
             pageRemoteConnect.Controls.Add(pnlBox);
 
@@ -454,7 +469,7 @@ namespace AetherDesk.Agent
             txtTargetId.BackColor = Color.FromArgb(10, 15, 29);
             txtTargetId.ForeColor = Color.FromArgb(56, 189, 248);
             txtTargetId.Location = new Point(16, 16);
-            txtTargetId.Size = new Size(400, 32);
+            txtTargetId.Size = new Size(440, 32);
             pnlBox.Controls.Add(txtTargetId);
 
             btnConnectTarget = new Button();
@@ -464,7 +479,7 @@ namespace AetherDesk.Agent
             btnConnectTarget.BackColor = Color.FromArgb(37, 99, 235);
             btnConnectTarget.FlatStyle = FlatStyle.Flat;
             btnConnectTarget.FlatAppearance.BorderSize = 0;
-            btnConnectTarget.Location = new Point(430, 14);
+            btnConnectTarget.Location = new Point(475, 14);
             btnConnectTarget.Size = new Size(170, 36);
             btnConnectTarget.Cursor = Cursors.Hand;
             btnConnectTarget.Click += (s, e) => {
@@ -486,7 +501,7 @@ namespace AetherDesk.Agent
 
             pnlRecentFlow = new FlowLayoutPanel();
             pnlRecentFlow.Location = new Point(0, 170);
-            pnlRecentFlow.Size = new Size(620, 200);
+            pnlRecentFlow.Size = new Size(660, 200);
             pnlRecentFlow.AutoScroll = true;
             pageRemoteConnect.Controls.Add(pnlRecentFlow);
 
@@ -498,7 +513,7 @@ namespace AetherDesk.Agent
         private void AddRecentCard(string id, string name, string ping)
         {
             Panel card = new Panel();
-            card.Size = new Size(185, 90);
+            card.Size = new Size(195, 90);
             card.Margin = new Padding(0, 0, 12, 12);
             card.BackColor = Color.FromArgb(15, 23, 42);
             card.Cursor = Cursors.Hand;
@@ -535,7 +550,7 @@ namespace AetherDesk.Agent
             pnlRecentFlow.Controls.Add(card);
         }
 
-        // UNIFIED IN-APP REMOTE DESKTOP CANVAS (SINGLE-WINDOW EXPERIENCE)
+        // UNIFIED IN-APP REMOTE DESKTOP CANVAS (SINGLE-WINDOW WITH TIMER & FILE TRANSFER)
         private void BuildPageActiveSession()
         {
             pageActiveSession = new Panel();
@@ -558,6 +573,29 @@ namespace AetherDesk.Agent
             lblSessionTargetInfo.AutoSize = true;
             pnlSessionTopBar.Controls.Add(lblSessionTargetInfo);
 
+            lblSessionDuration = new Label();
+            lblSessionDuration.Text = "⏱️ 00:00:00";
+            lblSessionDuration.Font = new Font("Consolas", 9.5f, FontStyle.Bold);
+            lblSessionDuration.ForeColor = Color.FromArgb(52, 211, 153);
+            lblSessionDuration.Location = new Point(320, 12);
+            lblSessionDuration.AutoSize = true;
+            pnlSessionTopBar.Controls.Add(lblSessionDuration);
+
+            // File Send Button
+            btnSessionSendFile = new Button();
+            btnSessionSendFile.Text = "📁 Dosya Gönder";
+            btnSessionSendFile.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnSessionSendFile.ForeColor = Color.White;
+            btnSessionSendFile.BackColor = Color.FromArgb(30, 41, 59);
+            btnSessionSendFile.FlatStyle = FlatStyle.Flat;
+            btnSessionSendFile.FlatAppearance.BorderSize = 0;
+            btnSessionSendFile.Size = new Size(115, 28);
+            btnSessionSendFile.Location = new Point(480, 8);
+            btnSessionSendFile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSessionSendFile.Cursor = Cursors.Hand;
+            btnSessionSendFile.Click += (s, e) => SendFileToRemote();
+            pnlSessionTopBar.Controls.Add(btnSessionSendFile);
+
             btnSessionCtrlAltDel = new Button();
             btnSessionCtrlAltDel.Text = "🛡️ Ctrl+Alt+Del";
             btnSessionCtrlAltDel.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
@@ -566,7 +604,7 @@ namespace AetherDesk.Agent
             btnSessionCtrlAltDel.FlatStyle = FlatStyle.Flat;
             btnSessionCtrlAltDel.FlatAppearance.BorderSize = 0;
             btnSessionCtrlAltDel.Size = new Size(110, 28);
-            btnSessionCtrlAltDel.Location = new Point(480, 8);
+            btnSessionCtrlAltDel.Location = new Point(605, 8);
             btnSessionCtrlAltDel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSessionCtrlAltDel.Cursor = Cursors.Hand;
             btnSessionCtrlAltDel.Click += (s, e) => SendRemoteKey("CtrlAltDel");
@@ -580,13 +618,10 @@ namespace AetherDesk.Agent
             btnCloseSession.FlatStyle = FlatStyle.Flat;
             btnCloseSession.FlatAppearance.BorderSize = 0;
             btnCloseSession.Size = new Size(125, 28);
-            btnCloseSession.Location = new Point(600, 8);
+            btnCloseSession.Location = new Point(725, 8);
             btnCloseSession.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnCloseSession.Cursor = Cursors.Hand;
-            btnCloseSession.Click += (s, e) => {
-                isInAppStreaming = false;
-                ShowPage(pageRemoteConnect, btnNavRemoteConnect);
-            };
+            btnCloseSession.Click += (s, e) => CloseInAppSession();
             pnlSessionTopBar.Controls.Add(btnCloseSession);
 
             picSessionViewport = new PictureBox();
@@ -597,7 +632,7 @@ namespace AetherDesk.Agent
             pageActiveSession.Controls.Add(picSessionViewport);
             picSessionViewport.BringToFront();
 
-            // Pixel-Perfect Mouse Normalization & Click Forwarding
+            // Pixel-Perfect Mouse & Click Forwarding
             picSessionViewport.MouseClick += (s, e) => {
                 Point norm = TranslateZoomCoordinates(picSessionViewport, e.Location);
                 if (!norm.IsEmpty)
@@ -617,7 +652,7 @@ namespace AetherDesk.Agent
 
             this.KeyPreview = true;
             this.KeyDown += (s, e) => {
-                if (isInAppStreaming)
+                if (isInAppStreaming && pageActiveSession.Visible)
                 {
                     SendRemoteKey(e.KeyCode.ToString());
                 }
@@ -627,51 +662,114 @@ namespace AetherDesk.Agent
         private void StartInAppSession(string targetId)
         {
             this.activeConnectedId = targetId;
+            this.sessionStartTime = DateTime.Now;
+            sessionTimer.Start();
+
             lblSessionTargetInfo.Text = "⚡ Canlı Oturum: " + targetId + " (Doğrudan Masaüstü)";
-            ShowPage(pageActiveSession, null);
-            isInAppStreaming = true;
+            btnNavActiveSession.Visible = true;
+            ShowPage(pageActiveSession, btnNavActiveSession);
 
-            inAppStreamThread = new Thread(() =>
+            if (!isInAppStreaming)
             {
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                while (isInAppStreaming)
+                isInAppStreaming = true;
+                inAppStreamThread = new Thread(() =>
                 {
-                    try
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    while (isInAppStreaming)
                     {
-                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/screen/" + targetId);
-                        req.Method = "GET";
-                        req.Timeout = 2000;
-
-                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                        using (Stream s = resp.GetResponseStream())
-                        using (MemoryStream ms = new MemoryStream())
+                        try
                         {
-                            s.CopyTo(ms);
-                            byte[] imgBytes = ms.ToArray();
-                            if (imgBytes.Length > 0)
+                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/screen/" + targetId);
+                            req.Method = "GET";
+                            req.Timeout = 2000;
+
+                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                            using (Stream s = resp.GetResponseStream())
+                            using (MemoryStream ms = new MemoryStream())
                             {
-                                using (MemoryStream mem = new MemoryStream(imgBytes))
+                                s.CopyTo(ms);
+                                byte[] imgBytes = ms.ToArray();
+                                if (imgBytes.Length > 0)
                                 {
-                                    Image img = Image.FromStream(mem);
-                                    if (picSessionViewport.IsHandleCreated)
+                                    using (MemoryStream mem = new MemoryStream(imgBytes))
                                     {
-                                        picSessionViewport.Invoke(new Action(() => {
-                                            Image old = picSessionViewport.Image;
-                                            picSessionViewport.Image = new Bitmap(img);
-                                            if (old != null) old.Dispose();
-                                        }));
+                                        Image img = Image.FromStream(mem);
+                                        if (picSessionViewport.IsHandleCreated)
+                                        {
+                                            picSessionViewport.Invoke(new Action(() => {
+                                                Image old = picSessionViewport.Image;
+                                                picSessionViewport.Image = new Bitmap(img);
+                                                if (old != null) old.Dispose();
+                                            }));
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    catch { }
+                        catch { }
 
-                    Thread.Sleep(150); // Fast 7 FPS smooth live canvas
+                        Thread.Sleep(150);
+                    }
+                });
+                inAppStreamThread.IsBackground = true;
+                inAppStreamThread.Start();
+            }
+        }
+
+        private void UpdateSessionTimer()
+        {
+            if (isInAppStreaming)
+            {
+                TimeSpan elapsed = DateTime.Now - sessionStartTime;
+                lblSessionDuration.Text = string.Format("⏱️ {0:D2}:{1:D2}:{2:D2}", (int)elapsed.TotalHours, elapsed.Minutes, elapsed.Seconds);
+                btnNavActiveSession.Text = string.Format("🟢 Canlı ({0:D2}:{1:D2})", elapsed.Minutes, elapsed.Seconds);
+            }
+        }
+
+        private void CloseInAppSession()
+        {
+            isInAppStreaming = false;
+            sessionTimer.Stop();
+            btnNavActiveSession.Visible = false;
+            ShowPage(pageRemoteConnect, btnNavRemoteConnect);
+        }
+
+        private void SendFileToRemote()
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "Karşı Bilgisayara Gönderilecek Dosyayı Seçin";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    string filePath = ofd.FileName;
+                    string fileName = Path.GetFileName(filePath);
+                    ThreadPool.QueueUserWorkItem((state) =>
+                    {
+                        try
+                        {
+                            byte[] fileBytes = File.ReadAllBytes(filePath);
+                            string uploadUrl = string.Format("{0}/api/file/upload/{1}?name={2}",
+                                CLOUD_RELAY_URL, activeConnectedId, Uri.EscapeDataString(fileName));
+                            
+                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(uploadUrl);
+                            req.Method = "POST";
+                            req.ContentType = "application/octet-stream";
+                            req.ContentLength = fileBytes.Length;
+                            using (Stream s = req.GetRequestStream())
+                            {
+                                s.Write(fileBytes, 0, fileBytes.Length);
+                            }
+                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+
+                            MessageBox.Show("'" + fileName + "' karşı bilgisayara başarıyla gönderildi!", "Dosya Transferi", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("Dosya gönderilemedi: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    });
                 }
-            });
-            inAppStreamThread.IsBackground = true;
-            inAppStreamThread.Start();
+            }
         }
 
         private Point TranslateZoomCoordinates(PictureBox pic, Point p)
@@ -747,7 +845,7 @@ namespace AetherDesk.Agent
             grpM.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             grpM.ForeColor = Color.FromArgb(56, 189, 248);
             grpM.Location = new Point(0, 45);
-            grpM.Size = new Size(620, 200);
+            grpM.Size = new Size(660, 200);
             pageSecurity.Controls.Add(grpM);
 
             rbUnattended = new RadioButton();
@@ -755,7 +853,7 @@ namespace AetherDesk.Agent
             rbUnattended.Font = new Font("Segoe UI", 9);
             rbUnattended.ForeColor = Color.FromArgb(241, 245, 249);
             rbUnattended.Location = new Point(20, 28);
-            rbUnattended.Size = new Size(560, 24);
+            rbUnattended.Size = new Size(600, 24);
             grpM.Controls.Add(rbUnattended);
 
             rbPassword = new RadioButton();
@@ -763,7 +861,7 @@ namespace AetherDesk.Agent
             rbPassword.Font = new Font("Segoe UI", 9);
             rbPassword.ForeColor = Color.FromArgb(241, 245, 249);
             rbPassword.Location = new Point(20, 58);
-            rbPassword.Size = new Size(560, 24);
+            rbPassword.Size = new Size(600, 24);
             grpM.Controls.Add(rbPassword);
 
             txtCustomPassword = new TextBox();
@@ -779,7 +877,7 @@ namespace AetherDesk.Agent
             rbPrompt.Font = new Font("Segoe UI", 9);
             rbPrompt.ForeColor = Color.FromArgb(241, 245, 249);
             rbPrompt.Location = new Point(20, 126);
-            rbPrompt.Size = new Size(560, 24);
+            rbPrompt.Size = new Size(600, 24);
             grpM.Controls.Add(rbPrompt);
 
             btnSaveSecurity = new Button();
@@ -790,7 +888,7 @@ namespace AetherDesk.Agent
             btnSaveSecurity.FlatStyle = FlatStyle.Flat;
             btnSaveSecurity.FlatAppearance.BorderSize = 0;
             btnSaveSecurity.Location = new Point(0, 265);
-            btnSaveSecurity.Size = new Size(620, 42);
+            btnSaveSecurity.Size = new Size(660, 42);
             btnSaveSecurity.Cursor = Cursors.Hand;
             btnSaveSecurity.Click += (s, e) => SaveSecurity();
             pageSecurity.Controls.Add(btnSaveSecurity);
@@ -813,7 +911,7 @@ namespace AetherDesk.Agent
 
             Panel pnlBox = new Panel();
             pnlBox.Location = new Point(0, 45);
-            pnlBox.Size = new Size(620, 260);
+            pnlBox.Size = new Size(660, 260);
             pnlBox.BackColor = Color.FromArgb(15, 23, 42);
             pnlBox.Padding = new Padding(20);
             pageSettings.Controls.Add(pnlBox);
@@ -822,7 +920,8 @@ namespace AetherDesk.Agent
             lblInfo.Text = "Bulut Sinyal & Relay Sunucusu:\n" + CLOUD_RELAY_URL + "\n\n" +
                            "Yerel Soket Dinleme Portu:\n8443 (HTTP Direct P2P)\n\n" +
                            "Ekran Yakalama Çekirdeği:\nDXGI / Windows Graphics Subsystem (60 FPS)\n\n" +
-                           "DPI Farkındalığı & Hassasiyet:\nAktif (Piksel Birebir Eşleme)";
+                           "DPI Farkındalığı & Hassasiyet:\nAktif (Piksel Birebir Eşleme)\n\n" +
+                           "Dosya Transferi:\nAktif (C:\\Users\\<Kullanıcı>\\Downloads)";
             lblInfo.Font = new Font("Segoe UI", 9.5f);
             lblInfo.ForeColor = Color.FromArgb(203, 213, 225);
             lblInfo.Dock = DockStyle.Fill;
@@ -1029,7 +1128,7 @@ namespace AetherDesk.Agent
                         using (StreamReader reader = new StreamReader(eventResp.GetResponseStream()))
                         {
                             string json = reader.ReadToEnd();
-                            if (chkInput.Checked && !string.IsNullOrEmpty(json) && json.Contains("action"))
+                            if (!string.IsNullOrEmpty(json) && json.Contains("action"))
                             {
                                 ProcessEventsRobust(json);
                             }
@@ -1055,7 +1154,7 @@ namespace AetherDesk.Agent
                     string action = GetRegexVal(obj, "action");
                     if (string.IsNullOrEmpty(action)) continue;
 
-                    if (action == "click" || action == "rightclick" || action == "dblclick" || action == "move")
+                    if (chkInput.Checked && (action == "click" || action == "rightclick" || action == "dblclick" || action == "move"))
                     {
                         int x = int.Parse(GetRegexVal(obj, "x") ?? "0");
                         int y = int.Parse(GetRegexVal(obj, "y") ?? "0");
@@ -1089,7 +1188,7 @@ namespace AetherDesk.Agent
                             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                         }
                     }
-                    else if (action == "key")
+                    else if (chkInput.Checked && action == "key")
                     {
                         string key = GetRegexVal(obj, "key");
                         if (!string.IsNullOrEmpty(key))
@@ -1097,9 +1196,51 @@ namespace AetherDesk.Agent
                             SendKeySafe(key);
                         }
                     }
+                    else if (chkFiles.Checked && action == "incoming_file")
+                    {
+                        // Auto-download incoming transferred file
+                        DownloadIncomingFile();
+                    }
                 }
             }
             catch { }
+        }
+
+        private void DownloadIncomingFile()
+        {
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string cleanId = this.mySessionId.Replace(" ", "");
+                    string downloadUrl = CLOUD_RELAY_URL + "/api/file/download/" + cleanId;
+                    
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(downloadUrl);
+                    req.Method = "GET";
+                    req.Timeout = 15000;
+
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                    {
+                        string contentDisp = resp.Headers["Content-Disposition"];
+                        string filename = "Gelen_Dosya.dat";
+                        if (!string.IsNullOrEmpty(contentDisp) && contentDisp.Contains("filename="))
+                        {
+                            int start = contentDisp.IndexOf("filename=") + 9;
+                            filename = contentDisp.Substring(start).Replace("\"", "").Trim();
+                        }
+
+                        string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                        string targetPath = Path.Combine(downloadsPath, filename);
+
+                        using (Stream s = resp.GetResponseStream())
+                        using (FileStream fs = new FileStream(targetPath, FileMode.Create, FileAccess.Write))
+                        {
+                            s.CopyTo(fs);
+                        }
+                    }
+                }
+                catch { }
+            });
         }
 
         private string GetRegexVal(string json, string key)

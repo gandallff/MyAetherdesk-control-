@@ -6,13 +6,14 @@ import { CONFIG } from './config';
 import { SessionManager } from './session_manager';
 import { WebSocketHandler } from './websocket_handler';
 
-// In-Memory Cloud Frame & Event Buffer per Session
+// In-Memory Cloud Frame, Event Buffer, and File Store
 const screenBuffers = new Map<string, { buffer: Buffer; updatedAt: number }>();
 const pendingEvents = new Map<string, Array<{ x: number; y: number; sw: number; sh: number; action: string; key?: string; text?: string }>>();
 const activeSessions = new Map<string, { lastSeen: number; ip: string; mode: string }>();
+const transferredFiles = new Map<string, { filename: string; buffer: Buffer; timestamp: number }>();
 
 const server = http.createServer((req, res) => {
-  // CORS Headers for Vercel & Web Clients
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
@@ -31,14 +32,14 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
-      service: 'AetherDesk Cloud Signaling & Screen Relay Server',
+      service: 'AetherDesk Cloud Relay & Remote File System',
       activeSessionsCount: activeSessions.size,
       uptime: process.uptime()
     }));
     return;
   }
 
-  // 2. Host Agent uploads live screen frame (POST /api/stream/:sessionId)
+  // 2. Screen Upload
   if (pathname.startsWith('/api/stream/')) {
     const sessionId = pathname.replace('/api/stream/', '').replace(/[\s\-]/g, '');
     const clientIp = req.socket.remoteAddress || 'unknown';
@@ -57,7 +58,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 3. Web Viewer fetches live screen frame (GET /api/screen/:sessionId)
+  // 3. Screen Fetch
   if (pathname.startsWith('/api/screen/')) {
     const sessionId = pathname.replace('/api/screen/', '').replace(/[\s\-]/g, '');
     const screenData = screenBuffers.get(sessionId);
@@ -71,12 +72,12 @@ const server = http.createServer((req, res) => {
       res.end(screenData.buffer);
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'No screen frame available for session: ' + sessionId }));
+      res.end(JSON.stringify({ error: 'No screen frame available' }));
     }
     return;
   }
 
-  // 4. Web Viewer sends mouse action (GET or POST /api/mouse/:sessionId)
+  // 4. Mouse Event
   if (pathname.startsWith('/api/mouse/')) {
     const sessionId = pathname.replace('/api/mouse/', '').replace(/[\s\-]/g, '');
     const x = parseInt(url.searchParams.get('x') || '0', 10);
@@ -89,14 +90,13 @@ const server = http.createServer((req, res) => {
       pendingEvents.set(sessionId, []);
     }
     pendingEvents.get(sessionId)!.push({ x, y, sw, sh, action });
-    console.log(`[Mouse Event Queued] Session: ${sessionId}, Action: ${action}, (${x}, ${y}) / (${sw}, ${sh})`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, queueLength: pendingEvents.get(sessionId)!.length }));
     return;
   }
 
-  // 5. Web Viewer sends keyboard key (GET or POST /api/keyboard/:sessionId)
+  // 5. Keyboard Event
   if (pathname.startsWith('/api/keyboard/')) {
     const sessionId = pathname.replace('/api/keyboard/', '').replace(/[\s\-]/g, '');
     const key = url.searchParams.get('key') || '';
@@ -106,25 +106,65 @@ const server = http.createServer((req, res) => {
       pendingEvents.set(sessionId, []);
     }
     pendingEvents.get(sessionId)!.push({ x: 0, y: 0, sw: 0, sh: 0, action: 'key', key, text });
-    console.log(`[Keyboard Event Queued] Session: ${sessionId}, Key: ${key}`);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true }));
     return;
   }
 
-  // 6. Host Agent polls pending input events (GET /api/events/:sessionId)
+  // 6. Poll Events
   if (pathname.startsWith('/api/events/')) {
     const sessionId = pathname.replace('/api/events/', '').replace(/[\s\-]/g, '');
     const events = pendingEvents.get(sessionId) || [];
-    pendingEvents.set(sessionId, []); // clear queue
+    pendingEvents.set(sessionId, []);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ events }));
     return;
   }
 
-  // 7. Active Sessions Discovery (GET /api/sessions)
+  // 7. File Upload (Send File to Remote PC)
+  if (pathname.startsWith('/api/file/upload/')) {
+    const sessionId = pathname.replace('/api/file/upload/', '').replace(/[\s\-]/g, '');
+    const filename = url.searchParams.get('name') || 'Transferred_File.dat';
+
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      const fullBuffer = Buffer.concat(chunks);
+      transferredFiles.set(sessionId, { filename, buffer: fullBuffer, timestamp: Date.now() });
+
+      // Notify remote agent about incoming file
+      if (!pendingEvents.has(sessionId)) pendingEvents.set(sessionId, []);
+      pendingEvents.get(sessionId)!.push({ x: 0, y: 0, sw: 0, sh: 0, action: 'incoming_file', text: filename });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, filename, size: fullBuffer.length }));
+    });
+    return;
+  }
+
+  // 8. File Download (Remote Agent downloads incoming file)
+  if (pathname.startsWith('/api/file/download/')) {
+    const sessionId = pathname.replace('/api/file/download/', '').replace(/[\s\-]/g, '');
+    const file = transferredFiles.get(sessionId);
+
+    if (file) {
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'Content-Length': file.buffer.length
+      });
+      res.end(file.buffer);
+      transferredFiles.delete(sessionId);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No pending file transfer for session' }));
+    }
+    return;
+  }
+
+  // 9. Active Sessions
   if (pathname === '/api/sessions') {
     const now = Date.now();
     const list: any[] = [];
@@ -138,7 +178,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 8. Direct Agent Downloads
+  // 10. Agent Downloads
   if (pathname === '/download/agent' || pathname === '/download/agent.exe') {
     const pathsToTry = [
       path.join(__dirname, '../../saas-portal/frontend/public/aetherdesk-agent.exe'),
@@ -175,7 +215,7 @@ const PORT = process.env.PORT || CONFIG.PORT || 8080;
 
 server.listen(PORT, () => {
   console.log(`=======================================================`);
-  console.log(`  🚀 AetherDesk Cloud Signaling & Relay Server Active`);
+  console.log(`  🚀 AetherDesk Cloud Signaling, Stream & File Active`);
   console.log(`  Port: ${PORT}`);
   console.log(`=======================================================`);
 });
