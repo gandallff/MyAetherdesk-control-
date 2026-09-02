@@ -6,11 +6,32 @@ import { CONFIG } from './config';
 import { SessionManager } from './session_manager';
 import { WebSocketHandler } from './websocket_handler';
 
-// In-Memory Cloud Frame, Event Buffer, and File Store
+// In-Memory Cloud Frame, Event Buffer, File Store, and User Database
 const screenBuffers = new Map<string, { buffer: Buffer; updatedAt: number }>();
 const pendingEvents = new Map<string, Array<{ x: number; y: number; sw: number; sh: number; action: string; key?: string; text?: string }>>();
 const activeSessions = new Map<string, { lastSeen: number; ip: string; mode: string }>();
 const transferredFiles = new Map<string, { filename: string; buffer: Buffer; timestamp: number }>();
+
+interface RegisteredUser {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  provider?: string;
+  devices: string[];
+  createdAt: number;
+}
+const registeredUsers = new Map<string, RegisteredUser>();
+
+// Pre-populate default admin user
+registeredUsers.set('admin@aetherdesk.com', {
+  id: 'usr_admin',
+  name: 'AetherDesk Yöneticisi',
+  email: 'admin@aetherdesk.com',
+  password: 'admin',
+  devices: ['212614962', '482910375'],
+  createdAt: Date.now()
+});
 
 const server = http.createServer((req, res) => {
   // CORS Headers
@@ -32,10 +53,174 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
-      service: 'AetherDesk Cloud Relay & Remote File System',
+      service: 'AetherDesk Cloud Relay & Auth Hub',
       activeSessionsCount: activeSessions.size,
+      registeredUsersCount: registeredUsers.size,
       uptime: process.uptime()
     }));
+    return;
+  }
+
+  // 1.1 Cloud Auth: Register User & Link Device
+  if (pathname === '/api/auth/register' && req.method === 'POST') {
+    const chunks: Buffer[] = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        const email = (body.email || '').trim().toLowerCase();
+        const name = body.name || email.split('@')[0];
+        const password = body.password || 'default123';
+        const deviceId = (body.deviceId || '').replace(/[\s\-]/g, '');
+
+        if (!email || !email.includes('@')) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Geçerli bir e-posta adresi gerekli' }));
+          return;
+        }
+
+        let user = registeredUsers.get(email);
+        if (!user) {
+          user = {
+            id: 'usr_' + Math.random().toString(36).substr(2, 9),
+            name,
+            email,
+            password,
+            devices: deviceId ? [deviceId] : [],
+            createdAt: Date.now()
+          };
+          registeredUsers.set(email, user);
+        } else {
+          if (deviceId && !user.devices.includes(deviceId)) {
+            user.devices.push(deviceId);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          message: 'Kayıt başarılı',
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            devices: user.devices
+          }
+        }));
+      } catch (e: any) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Geçersiz veri: ' + e.message }));
+      }
+    });
+    return;
+  }
+
+  // 1.2 Cloud Auth: Login & Link Device
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    const chunks: Buffer[] = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        const email = (body.email || '').trim().toLowerCase();
+        const password = body.password || '';
+        const deviceId = (body.deviceId || '').replace(/[\s\-]/g, '');
+
+        let user = registeredUsers.get(email);
+        if (!user) {
+          // Auto-provision if valid email provided
+          user = {
+            id: 'usr_' + Math.random().toString(36).substr(2, 9),
+            name: email.split('@')[0],
+            email,
+            password,
+            devices: deviceId ? [deviceId] : [],
+            createdAt: Date.now()
+          };
+          registeredUsers.set(email, user);
+        } else {
+          if (deviceId && !user.devices.includes(deviceId)) {
+            user.devices.push(deviceId);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            devices: user.devices
+          }
+        }));
+      } catch (e: any) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // 1.3 Cloud Auth: SSO (Google / Microsoft / Apple)
+  if (pathname === '/api/auth/sso' && req.method === 'POST') {
+    const chunks: Buffer[] = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        const provider = body.provider || 'Google';
+        const email = (body.email || `${provider.toLowerCase()}.user@aetherdesk.com`).trim().toLowerCase();
+        const name = body.name || `${provider} Kullanıcısı`;
+        const deviceId = (body.deviceId || '').replace(/[\s\-]/g, '');
+
+        let user = registeredUsers.get(email);
+        if (!user) {
+          user = {
+            id: 'usr_' + Math.random().toString(36).substr(2, 9),
+            name,
+            email,
+            provider,
+            devices: deviceId ? [deviceId] : [],
+            createdAt: Date.now()
+          };
+          registeredUsers.set(email, user);
+        } else {
+          if (deviceId && !user.devices.includes(deviceId)) {
+            user.devices.push(deviceId);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          ok: true,
+          provider,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            devices: user.devices
+          }
+        }));
+      } catch (e: any) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // 1.4 Get User Registered Devices
+  if (pathname.startsWith('/api/user/devices/')) {
+    const email = decodeURIComponent(pathname.replace('/api/user/devices/', '')).trim().toLowerCase();
+    const user = registeredUsers.get(email);
+    if (user) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, email: user.email, devices: user.devices }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Kullanıcı bulunamadı', devices: [] }));
+    }
     return;
   }
 

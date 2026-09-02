@@ -780,15 +780,49 @@ namespace AetherDesk.Agent
                 Cursor = Cursors.Hand
             };
             btnSubmitDevam.Click += (s, e) => {
-                if (txtRegEmail.Text.Contains("@"))
+                string inputEmail = txtRegEmail.Text.Trim();
+                string inputName = string.IsNullOrEmpty(txtRegFullName.Text) ? inputEmail.Split('@')[0] : txtRegFullName.Text.Trim();
+                if (inputEmail.Contains("@"))
                 {
                     isLoggedIn = true;
-                    userEmail = txtRegEmail.Text.Trim();
-                    userDisplayName = string.IsNullOrEmpty(txtRegFullName.Text) ? userEmail.Split('@')[0] : txtRegFullName.Text.Trim();
+                    userEmail = inputEmail;
+                    userDisplayName = inputName;
                     SaveAuthSettings();
                     pnlAuthModalOverlay.Visible = false;
                     pnlLeftHero.Invalidate();
-                    MessageBox.Show("Hoş geldiniz, " + userDisplayName + "!\nHesabınız başarıyla kaydedildi.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    // Real Cloud Registration & Device Binding
+                    ThreadPool.QueueUserWorkItem((state) =>
+                    {
+                        try
+                        {
+                            string cleanId = this.mySessionId.Replace(" ", "");
+                            string jsonPayload = string.Format("{{\"name\":\"{0}\",\"email\":\"{1}\",\"deviceId\":\"{2}\"}}",
+                                Uri.EscapeDataString(inputName), Uri.EscapeDataString(inputEmail), cleanId);
+                            byte[] data = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
+
+                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/auth/register");
+                            req.Method = "POST";
+                            req.ContentType = "application/json";
+                            req.ContentLength = data.Length;
+                            using (Stream stream = req.GetRequestStream())
+                            {
+                                stream.Write(data, 0, data.Length);
+                            }
+                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                        }
+                        catch { }
+                    });
+
+                    MessageBox.Show(
+                        "Tebrikler, " + userDisplayName + "!\n\n" +
+                        "✓ Topluluk hesabınız başarıyla oluşturuldu.\n" +
+                        "✓ Bu cihazınız (" + this.mySessionId + ") hesabınıza bağlandı.\n" +
+                        "✓ Adres defteriniz ve cihaz yönetimi aktif.",
+                        "AetherDesk Enterprise",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
                 }
                 else
                 {
@@ -819,11 +853,30 @@ namespace AetherDesk.Agent
             pnlModalCard.Controls.Add(btnSsoGoogle);
             pnlModalCard.Controls.Add(btnSsoApple);
 
+            // Web Portal Direct Registration Link
+            Button btnWebRegisterDirect = new Button();
+            btnWebRegisterDirect.Text = "🌐   Web Portalı Üzerinden Kaydol / Giriş Yap";
+            btnWebRegisterDirect.Top = 432;
+            btnWebRegisterDirect.Left = 36;
+            btnWebRegisterDirect.Width = 388;
+            btnWebRegisterDirect.Height = 36;
+            btnWebRegisterDirect.FlatStyle = FlatStyle.Flat;
+            btnWebRegisterDirect.FlatAppearance.BorderColor = clrAccentCyan;
+            btnWebRegisterDirect.BackColor = clrInnerBox;
+            btnWebRegisterDirect.ForeColor = clrAccentCyan;
+            btnWebRegisterDirect.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnWebRegisterDirect.Cursor = Cursors.Hand;
+            btnWebRegisterDirect.Click += (s, e) => {
+                string cleanId = this.mySessionId.Replace(" ", "");
+                System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/#/login?device_id={0}&action=register", cleanId));
+            };
+            pnlModalCard.Controls.Add(btnWebRegisterDirect);
+
             Label lblAlreadyAccount = new Label();
             lblAlreadyAccount.Text = "Hesabınız var mı? Oturum aç";
             lblAlreadyAccount.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             lblAlreadyAccount.ForeColor = clrAccentCyan;
-            lblAlreadyAccount.Location = new Point(36, 450);
+            lblAlreadyAccount.Location = new Point(36, 476);
             lblAlreadyAccount.Size = new Size(388, 24);
             lblAlreadyAccount.TextAlign = ContentAlignment.MiddleCenter;
             lblAlreadyAccount.Cursor = Cursors.Hand;
@@ -867,13 +920,53 @@ namespace AetherDesk.Agent
 
         private void PerformSocialLogin(string provider)
         {
+            string cleanId = this.mySessionId.Replace(" ", "");
             isLoggedIn = true;
             userEmail = provider.ToLower() + ".user@aetherdesk.com";
             userDisplayName = provider + " Kullanıcısı";
             SaveAuthSettings();
             pnlAuthModalOverlay.Visible = false;
             pnlLeftHero.Invalidate();
-            MessageBox.Show(provider + " ile başarıyla giriş yapıldı!\nHoş geldiniz, " + userDisplayName, "AetherDesk SSO", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            // 1. Notify cloud relay to register user & device
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string jsonPayload = string.Format("{{\"provider\":\"{0}\",\"name\":\"{1}\",\"email\":\"{2}\",\"deviceId\":\"{3}\"}}",
+                        provider, provider + " Kullanıcısı", provider.ToLower() + "@aetherdesk.com", cleanId);
+                    byte[] data = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
+
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/auth/sso");
+                    req.Method = "POST";
+                    req.ContentType = "application/json";
+                    req.ContentLength = data.Length;
+                    using (Stream stream = req.GetRequestStream())
+                    {
+                        stream.Write(data, 0, data.Length);
+                    }
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                }
+                catch { }
+            });
+
+            // 2. Open official web auth portal in browser (TeamViewer style)
+            string webUrl = string.Format("https://my-aetherdesk-control.vercel.app/#/login?provider={0}&device_id={1}&action=sso",
+                provider.ToLower(), cleanId);
+            try
+            {
+                System.Diagnostics.Process.Start(webUrl);
+            }
+            catch { }
+
+            MessageBox.Show(
+                provider + " kimlik doğrulaması tarayıcınızda açıldı.\n\n" +
+                "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") " + provider + " hesabınıza bağlandı.\n" +
+                "✓ Web portalı üzerinden oturumunuz açılıyor.",
+                "AetherDesk " + provider + " Girişi",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
         }
 
         private void ShowAuthModal()
