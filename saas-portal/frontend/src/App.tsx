@@ -6,55 +6,47 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 
 export const AppContent: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    const fullUrl = window.location.href;
+  // Synchronous URL inspection
+  const checkIsAuthUrl = (): boolean => {
+    const fullUrl = window.location.href.toLowerCase();
     const searchParams = new URLSearchParams(window.location.search);
     const hash = window.location.hash || '';
     const hashParams = new URLSearchParams(hash.includes('?') ? hash.substring(hash.indexOf('?')) : '');
 
-    const isAuthUrl = 
-      fullUrl.includes('login') || 
-      fullUrl.includes('register') || 
-      searchParams.has('action') || 
-      searchParams.has('device_id') || 
+    return (
+      fullUrl.includes('login') ||
+      fullUrl.includes('register') ||
+      fullUrl.includes('google_login') ||
+      searchParams.has('action') ||
+      searchParams.has('device_id') ||
       searchParams.has('provider') ||
+      searchParams.has('google_login') ||
       hashParams.has('action') ||
       hashParams.has('device_id') ||
-      hashParams.has('provider');
+      hashParams.has('provider')
+    );
+  };
 
-    if (isAuthUrl) {
-      setShowAuthModal(true);
-    }
+  const isAuthInitially = checkIsAuthUrl();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(isAuthInitially);
+  const [loading, setLoading] = useState<boolean>(!isAuthInitially);
 
-    const directConnectId = searchParams.get('connect') || searchParams.get('id') || hashParams.get('connect') || hashParams.get('id');
-
-    ApiService.getCurrentUser()
-      .then((res) => {
-        setCurrentUser(res.user);
-      })
-      .catch(() => {
-        if (directConnectId) {
-          const guestUser: User = {
-            id: 'guest_operator',
-            email: 'operator@aetherdesk.com',
-            name: 'Operator',
-            role: 'ADMIN',
-            company: 'AetherDesk Direct',
-            plan: 'PRO'
-          };
-          setCurrentUser(guestUser);
-        } else {
+  useEffect(() => {
+    // If not on an explicit auth page, check stored login state
+    if (!isAuthInitially) {
+      ApiService.getCurrentUser()
+        .then((res) => {
+          setCurrentUser(res.user);
+        })
+        .catch(() => {
           ApiService.clearToken();
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [isAuthInitially]);
 
   const handleLogout = () => {
     ApiService.clearToken();
@@ -71,25 +63,25 @@ export const AppContent: React.FC = () => {
     );
   }
 
-  // 1. Logged In View -> Dashboard Page
-  if (currentUser) {
-    return (
-      <DashboardPage
-        user={currentUser}
-        onLogout={handleLogout}
-        onUserUpdated={(updated) => setCurrentUser(updated)}
-      />
-    );
-  }
-
-  // 2. Auth Modal Screen
-  if (showAuthModal) {
+  // 1. If explicit auth URL requested -> ALWAYS render Image 1 (LoginPage / Register)
+  if (showAuthModal && !currentUser) {
     return (
       <LoginPage
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           setShowAuthModal(false);
         }}
+      />
+    );
+  }
+
+  // 2. Logged In View -> Dashboard Page
+  if (currentUser) {
+    return (
+      <DashboardPage
+        user={currentUser}
+        onLogout={handleLogout}
+        onUserUpdated={(updated) => setCurrentUser(updated)}
       />
     );
   }

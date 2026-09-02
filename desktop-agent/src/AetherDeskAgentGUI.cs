@@ -948,9 +948,21 @@ namespace AetherDesk.Agent
                 catch { }
             });
 
-            // 2. Open official web auth portal in browser (TeamViewer style)
-            string webUrl = string.Format("https://my-aetherdesk-control.vercel.app/?action=register&provider={0}&device_id={1}#/login",
-                provider.ToLower(), cleanId);
+            // 2. Open official web auth portal or Google Account Chooser (Image 2)
+            string webUrl;
+            if (provider.ToLower() == "google")
+            {
+                // Real Google Account Chooser (Image 2)
+                string continueTarget = Uri.EscapeDataString(string.Format("https://my-aetherdesk-control.vercel.app/?google_login=true&device_id={0}", cleanId));
+                webUrl = "https://accounts.google.com/AccountChooser?continue=" + continueTarget;
+            }
+            else
+            {
+                // Image 1: AetherDesk TeamViewer-style Registration Page
+                webUrl = string.Format("https://my-aetherdesk-control.vercel.app/?action=register&provider={0}&device_id={1}",
+                    provider.ToLower(), cleanId);
+            }
+
             try
             {
                 System.Diagnostics.Process.Start(webUrl);
@@ -960,8 +972,8 @@ namespace AetherDesk.Agent
             ShowModernDarkNotification(
                 provider + " Doğrulaması",
                 provider + " kimlik doğrulaması tarayıcınızda açıldı.\n\n" +
-                "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") " + provider + " hesabınıza bağlandı.\n" +
-                "✓ Web portalı üzerinden oturumunuz açılıyor."
+                "✓ Google hesap seçici ekranına yönlendirildiniz.\n" +
+                "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") hesabınıza otomatik bağlanacaktır."
             );
         }
 
