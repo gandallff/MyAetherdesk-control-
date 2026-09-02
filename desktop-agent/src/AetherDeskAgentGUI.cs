@@ -814,19 +814,17 @@ namespace AetherDesk.Agent
                         catch { }
                     });
 
-                    MessageBox.Show(
+                    ShowModernDarkNotification(
+                        "Hesabınız Başarıyla Kaydedildi",
                         "Tebrikler, " + userDisplayName + "!\n\n" +
                         "✓ Topluluk hesabınız başarıyla oluşturuldu.\n" +
                         "✓ Bu cihazınız (" + this.mySessionId + ") hesabınıza bağlandı.\n" +
-                        "✓ Adres defteriniz ve cihaz yönetimi aktif.",
-                        "AetherDesk Enterprise",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
+                        "✓ Adres defteriniz ve cihaz yönetimi aktif."
                     );
                 }
                 else
                 {
-                    MessageBox.Show("Lütfen geçerli bir e-posta adresi girin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    ShowModernDarkNotification("Geçersiz E-posta", "Lütfen geçerli bir e-posta adresi girin.");
                 }
             };
 
@@ -868,7 +866,7 @@ namespace AetherDesk.Agent
             btnWebRegisterDirect.Cursor = Cursors.Hand;
             btnWebRegisterDirect.Click += (s, e) => {
                 string cleanId = this.mySessionId.Replace(" ", "");
-                System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/#/login?device_id={0}&action=register", cleanId));
+                System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/?action=register&device_id={0}#/login", cleanId));
             };
             pnlModalCard.Controls.Add(btnWebRegisterDirect);
 
@@ -889,11 +887,11 @@ namespace AetherDesk.Agent
                     SaveAuthSettings();
                     pnlAuthModalOverlay.Visible = false;
                     pnlLeftHero.Invalidate();
-                    MessageBox.Show("Giriş yapıldı: " + userDisplayName, "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ShowModernDarkNotification("Giriş Yapıldı", "Oturumunuz başarıyla açıldı: " + userDisplayName);
                 }
                 else
                 {
-                    MessageBox.Show("Lütfen geçerli bir e-posta adresi yazıp 'Devam' butonuna basınız.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ShowModernDarkNotification("Bilgi", "Lütfen geçerli bir e-posta adresi yazıp 'Devam' butonuna basınız.");
                 }
             };
             pnlModalCard.Controls.Add(lblAlreadyAccount);
@@ -951,7 +949,7 @@ namespace AetherDesk.Agent
             });
 
             // 2. Open official web auth portal in browser (TeamViewer style)
-            string webUrl = string.Format("https://my-aetherdesk-control.vercel.app/#/login?provider={0}&device_id={1}&action=sso",
+            string webUrl = string.Format("https://my-aetherdesk-control.vercel.app/?action=register&provider={0}&device_id={1}#/login",
                 provider.ToLower(), cleanId);
             try
             {
@@ -959,14 +957,79 @@ namespace AetherDesk.Agent
             }
             catch { }
 
-            MessageBox.Show(
+            ShowModernDarkNotification(
+                provider + " Doğrulaması",
                 provider + " kimlik doğrulaması tarayıcınızda açıldı.\n\n" +
                 "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") " + provider + " hesabınıza bağlandı.\n" +
-                "✓ Web portalı üzerinden oturumunuz açılıyor.",
-                "AetherDesk " + provider + " Girişi",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
+                "✓ Web portalı üzerinden oturumunuz açılıyor."
             );
+        }
+
+        private void ShowModernDarkNotification(string title, string message)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => ShowModernDarkNotification(title, message)));
+                return;
+            }
+
+            Panel pnlPopupBackdrop = new Panel();
+            pnlPopupBackdrop.Dock = DockStyle.Fill;
+            pnlPopupBackdrop.BackColor = Color.FromArgb(215, 10, 13, 18);
+            this.Controls.Add(pnlPopupBackdrop);
+            pnlPopupBackdrop.BringToFront();
+
+            Panel pnlPopupCard = new Panel();
+            pnlPopupCard.Size = new Size(460, 240);
+            pnlPopupCard.BackColor = Color.FromArgb(22, 27, 36);
+            pnlPopupCard.Anchor = AnchorStyles.None;
+            pnlPopupCard.Location = new Point((pnlPopupBackdrop.Width - pnlPopupCard.Width) / 2, (pnlPopupBackdrop.Height - pnlPopupCard.Height) / 2);
+            pnlPopupCard.Paint += (s, e) => {
+                using (Pen p = new Pen(Color.FromArgb(48, 56, 70), 1.5f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlPopupCard.Width - 1, pnlPopupCard.Height - 1);
+                }
+            };
+            pnlPopupBackdrop.Controls.Add(pnlPopupCard);
+
+            pnlPopupBackdrop.Resize += (s, e) => {
+                pnlPopupCard.Location = new Point((pnlPopupBackdrop.Width - pnlPopupCard.Width) / 2, (pnlPopupBackdrop.Height - pnlPopupCard.Height) / 2);
+            };
+
+            // Header Title
+            Label lblPopTitle = new Label();
+            lblPopTitle.Text = "🛡️  " + title;
+            lblPopTitle.Font = new Font("Segoe UI", 12.5f, FontStyle.Bold);
+            lblPopTitle.ForeColor = Color.White;
+            lblPopTitle.Location = new Point(24, 20);
+            lblPopTitle.Size = new Size(410, 28);
+            pnlPopupCard.Controls.Add(lblPopTitle);
+
+            // Message text
+            Label lblPopMsg = new Label();
+            lblPopMsg.Text = message;
+            lblPopMsg.Font = new Font("Segoe UI", 9.5f);
+            lblPopMsg.ForeColor = Color.FromArgb(203, 213, 225);
+            lblPopMsg.Location = new Point(24, 56);
+            lblPopMsg.Size = new Size(410, 110);
+            pnlPopupCard.Controls.Add(lblPopMsg);
+
+            // Modern OK Button
+            Button btnPopOk = new Button();
+            btnPopOk.Text = "Tamam, Anladım";
+            btnPopOk.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnPopOk.ForeColor = Color.White;
+            btnPopOk.BackColor = clrAccentBlue;
+            btnPopOk.FlatStyle = FlatStyle.Flat;
+            btnPopOk.FlatAppearance.BorderSize = 0;
+            btnPopOk.Size = new Size(150, 38);
+            btnPopOk.Location = new Point(pnlPopupCard.Width - 174, 180);
+            btnPopOk.Cursor = Cursors.Hand;
+            btnPopOk.Click += (s, e) => {
+                this.Controls.Remove(pnlPopupBackdrop);
+                pnlPopupBackdrop.Dispose();
+            };
+            pnlPopupCard.Controls.Add(btnPopOk);
         }
 
         private void ShowAuthModal()

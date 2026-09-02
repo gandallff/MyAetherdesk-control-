@@ -11,8 +11,26 @@ export const AppContent: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const directConnectId = params.get('connect') || params.get('id');
+    const fullUrl = window.location.href;
+    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash || '';
+    const hashParams = new URLSearchParams(hash.includes('?') ? hash.substring(hash.indexOf('?')) : '');
+
+    const isAuthUrl = 
+      fullUrl.includes('login') || 
+      fullUrl.includes('register') || 
+      searchParams.has('action') || 
+      searchParams.has('device_id') || 
+      searchParams.has('provider') ||
+      hashParams.has('action') ||
+      hashParams.has('device_id') ||
+      hashParams.has('provider');
+
+    if (isAuthUrl) {
+      setShowAuthModal(true);
+    }
+
+    const directConnectId = searchParams.get('connect') || searchParams.get('id') || hashParams.get('connect') || hashParams.get('id');
 
     ApiService.getCurrentUser()
       .then((res) => {
