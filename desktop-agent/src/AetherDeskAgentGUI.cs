@@ -88,7 +88,9 @@ namespace AetherDesk.Agent
         private Panel pnlMainBody;
         private Panel pnlLeftSidebar;
         private Panel pnlMainContent;
+        private Panel pnlCardContainer;
         private bool isLeftSidebarOpen = false;
+        private const int SIDEBAR_WIDTH = 240;
 
         // In-App Session Page
         private Panel pnlActiveSession;
@@ -145,8 +147,8 @@ namespace AetherDesk.Agent
             this.accessPassword = GenerateRandomSessionPass();
 
             this.Text = "AetherDesk Enterprise - Remote Access";
-            this.Size = new Size(1020, 700);
-            this.MinimumSize = new Size(920, 620);
+            this.Size = new Size(950, 680);
+            this.MinimumSize = new Size(880, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.None;
             this.BackColor = clrBg;
@@ -257,7 +259,7 @@ namespace AetherDesk.Agent
             picTitleLogo.MouseDown += (s, e) => DragWindow(e);
             pnlCustomTitleBar.Controls.Add(picTitleLogo);
 
-            // Brand Title (Visible when expanded or on titlebar)
+            // Brand Title
             lblAppBrandTitle = new Label();
             lblAppBrandTitle.Text = "AetherDesk Remote Access";
             lblAppBrandTitle.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
@@ -276,12 +278,12 @@ namespace AetherDesk.Agent
             pnlCustomTitleBar.Controls.Add(btnMax);
             pnlCustomTitleBar.Controls.Add(btnMin);
 
-            // User Profile Badge / Login Button (Right side, TeamViewer style)
+            // User Profile Badge / Login Button
             btnUserAvatarBadge = new Button();
             btnUserAvatarBadge.Text = userInitials;
             btnUserAvatarBadge.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             btnUserAvatarBadge.ForeColor = Color.White;
-            btnUserAvatarBadge.BackColor = Color.FromArgb(88, 28, 135); // Sleek Purple Badge
+            btnUserAvatarBadge.BackColor = Color.FromArgb(88, 28, 135);
             btnUserAvatarBadge.FlatStyle = FlatStyle.Flat;
             btnUserAvatarBadge.FlatAppearance.BorderSize = 0;
             btnUserAvatarBadge.Size = new Size(32, 32);
@@ -340,10 +342,10 @@ namespace AetherDesk.Agent
             this.Controls.Add(pnlMainBody);
             pnlMainBody.BringToFront();
 
-            // Left Slide-out Menu (Collapsible via top-left hamburger)
+            // Left Slide-out Menu (Docked Left, hidden initially)
             pnlLeftSidebar = new Panel();
             pnlLeftSidebar.Dock = DockStyle.Left;
-            pnlLeftSidebar.Width = 240;
+            pnlLeftSidebar.Width = SIDEBAR_WIDTH;
             pnlLeftSidebar.BackColor = Color.FromArgb(17, 20, 26);
             pnlLeftSidebar.Padding = new Padding(12, 16, 12, 16);
             pnlLeftSidebar.Visible = false;
@@ -351,11 +353,11 @@ namespace AetherDesk.Agent
 
             BuildLeftSidebarItems();
 
-            // Main Content Area (Two-Column TeamViewer Workflow)
+            // Main Content Area
             pnlMainContent = new Panel();
             pnlMainContent.Dock = DockStyle.Fill;
             pnlMainContent.BackColor = clrBg;
-            pnlMainContent.Padding = new Padding(30, 20, 30, 20);
+            pnlMainContent.Padding = new Padding(20);
             pnlMainBody.Controls.Add(pnlMainContent);
             pnlMainContent.BringToFront();
 
@@ -365,15 +367,33 @@ namespace AetherDesk.Agent
             BuildActiveSessionPage();
         }
 
+        // SMOOTH EXPANDING SIDEBAR: Form expands width to the right so content NEVER overlaps!
         private void ToggleLeftSidebar()
         {
             isLeftSidebarOpen = !isLeftSidebarOpen;
-            pnlLeftSidebar.Visible = isLeftSidebarOpen;
+            if (isLeftSidebarOpen)
+            {
+                this.Width += SIDEBAR_WIDTH;
+                pnlLeftSidebar.Visible = true;
+            }
+            else
+            {
+                pnlLeftSidebar.Visible = false;
+                this.Width -= SIDEBAR_WIDTH;
+            }
+
+            // Reposition card container in center
+            if (pnlCardContainer != null && pnlMainContent != null)
+            {
+                pnlCardContainer.Location = new Point(
+                    Math.Max(10, (pnlMainContent.Width - pnlCardContainer.Width) / 2),
+                    Math.Max(10, (pnlMainContent.Height - pnlCardContainer.Height) / 2)
+                );
+            }
         }
 
         private void BuildLeftSidebarItems()
         {
-            // Sidebar Header with Logo + Brand
             Panel pnlSideHeader = new Panel();
             pnlSideHeader.Dock = DockStyle.Top;
             pnlSideHeader.Height = 55;
@@ -433,8 +453,7 @@ namespace AetherDesk.Agent
         // TWO-COLUMN WORKFLOW CARDS (TeamViewer Layout with Deep Dark Aesthetics)
         private void BuildTwoColumnWorkflowCards()
         {
-            // Container Panel that holds Left & Right Cards
-            Panel pnlCardContainer = new Panel();
+            pnlCardContainer = new Panel();
             pnlCardContainer.Size = new Size(880, 480);
             pnlCardContainer.BackColor = Color.Transparent;
             pnlCardContainer.Anchor = AnchorStyles.None;
@@ -442,12 +461,13 @@ namespace AetherDesk.Agent
             pnlMainContent.Controls.Add(pnlCardContainer);
 
             pnlMainContent.Resize += (s, e) => {
-                pnlCardContainer.Location = new Point((pnlMainContent.Width - pnlCardContainer.Width) / 2, (pnlMainContent.Height - pnlCardContainer.Height) / 2);
+                pnlCardContainer.Location = new Point(
+                    Math.Max(10, (pnlMainContent.Width - pnlCardContainer.Width) / 2),
+                    Math.Max(10, (pnlMainContent.Height - pnlCardContainer.Height) / 2)
+                );
             };
 
-            // ----------------------------------------------------
-            // LEFT CARD: "Uzaktan Kontrole İzin Ver" (Allow Remote Control)
-            // ----------------------------------------------------
+            // LEFT CARD: "Uzaktan Kontrole İzin Ver"
             Panel pnlLeftCard = new Panel();
             pnlLeftCard.Location = new Point(0, 10);
             pnlLeftCard.Size = new Size(420, 380);
@@ -468,7 +488,7 @@ namespace AetherDesk.Agent
             lblLeftHeader.AutoSize = true;
             pnlLeftCard.Controls.Add(lblLeftHeader);
 
-            // Sub-box: Kimliğiniz (ID Box)
+            // Kimliğiniz (ID Box)
             Panel pnlIdBox = new Panel();
             pnlIdBox.Location = new Point(20, 68);
             pnlIdBox.Size = new Size(380, 84);
@@ -513,7 +533,7 @@ namespace AetherDesk.Agent
             };
             pnlIdBox.Controls.Add(btnCopyId);
 
-            // Sub-box: Parola (Password Box)
+            // Parola (Password Box)
             Panel pnlPassBox = new Panel();
             pnlPassBox.Location = new Point(20, 168);
             pnlPassBox.Size = new Size(380, 84);
@@ -537,7 +557,7 @@ namespace AetherDesk.Agent
             lblMyPassDisplay = new Label();
             lblMyPassDisplay.Text = this.accessPassword;
             lblMyPassDisplay.Font = new Font("Segoe UI", 18, FontStyle.Bold);
-            lblMyPassDisplay.ForeColor = Color.FromArgb(245, 158, 11); // Amber
+            lblMyPassDisplay.ForeColor = Color.FromArgb(245, 158, 11);
             lblMyPassDisplay.Location = new Point(12, 34);
             lblMyPassDisplay.Size = new Size(250, 36);
             pnlPassBox.Controls.Add(lblMyPassDisplay);
@@ -574,7 +594,6 @@ namespace AetherDesk.Agent
             };
             pnlPassBox.Controls.Add(btnCopyPass);
 
-            // Checkbox: Bu cihaza Kolay erişim sağlayın
             chkEasyAccess = new CheckBox();
             chkEasyAccess.Text = "Bu cihaza Kolay erişim sağlayın (Katılımsız)";
             chkEasyAccess.Font = new Font("Segoe UI", 9f);
@@ -588,9 +607,7 @@ namespace AetherDesk.Agent
             };
             pnlLeftCard.Controls.Add(chkEasyAccess);
 
-            // ----------------------------------------------------
-            // RIGHT CARD: "Uzak Cihazı Kontrol Et" (Control Remote Device)
-            // ----------------------------------------------------
+            // RIGHT CARD: "Uzak Cihazı Kontrol Et"
             Panel pnlRightCard = new Panel();
             pnlRightCard.Location = new Point(450, 10);
             pnlRightCard.Size = new Size(430, 380);
@@ -619,7 +636,6 @@ namespace AetherDesk.Agent
             lblModeTag.AutoSize = true;
             pnlRightCard.Controls.Add(lblModeTag);
 
-            // Target Input Box with Floating Border Style
             Panel pnlTargetInputBox = new Panel();
             pnlTargetInputBox.Location = new Point(24, 98);
             pnlTargetInputBox.Size = new Size(380, 56);
@@ -649,7 +665,6 @@ namespace AetherDesk.Agent
             txtRemoteTargetId.Size = new Size(340, 22);
             pnlTargetInputBox.Controls.Add(txtRemoteTargetId);
 
-            // Big Action Button: "Bağlan" (Connect)
             btnConnectTarget = new Button();
             btnConnectTarget.Text = "Bağlan";
             btnConnectTarget.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
@@ -669,7 +684,6 @@ namespace AetherDesk.Agent
             };
             pnlRightCard.Controls.Add(btnConnectTarget);
 
-            // Recent Sessions quick picker cards
             Label lblRecentTag = new Label();
             lblRecentTag.Text = "Son Bağlanılan Oturumlar:";
             lblRecentTag.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
@@ -688,9 +702,7 @@ namespace AetherDesk.Agent
             flowRecents.Controls.Add(CreateRecentChip("482 910 375", "Sunucu"));
             flowRecents.Controls.Add(CreateRecentChip("891 204 153", "Muhasebe"));
 
-            // ----------------------------------------------------
-            // BOTTOM STATUS FOOTER BAR
-            // ----------------------------------------------------
+            // BOTTOM STATUS BAR
             Panel pnlBottomStatus = new Panel();
             pnlBottomStatus.Location = new Point(0, 415);
             pnlBottomStatus.Size = new Size(880, 40);
@@ -744,9 +756,6 @@ namespace AetherDesk.Agent
             return btn;
         }
 
-        // ----------------------------------------------------
-        // EMAIL LOGIN & REGISTER MODAL (TeamViewer style)
-        // ----------------------------------------------------
         private void ShowLoginRegisterModal()
         {
             Form dlgAuth = new Form();
@@ -762,7 +771,6 @@ namespace AetherDesk.Agent
             tabAuth.Dock = DockStyle.Fill;
             tabAuth.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
 
-            // Tab 1: Giriş Yap
             TabPage tabLogin = new TabPage("Giriş Yap");
             tabLogin.BackColor = clrCardBg;
 
@@ -781,7 +789,7 @@ namespace AetherDesk.Agent
                     userDisplayName = userEmail.Split('@')[0];
                     userInitials = userDisplayName.Substring(0, Math.Min(2, userDisplayName.Length)).ToUpper();
                     btnUserAvatarBadge.Text = userInitials;
-                    btnUserAvatarBadge.BackColor = Color.FromArgb(16, 185, 129); // Green badge when logged in
+                    btnUserAvatarBadge.BackColor = Color.FromArgb(16, 185, 129);
                     MessageBox.Show("Hoş geldiniz, " + userDisplayName + "!\nCihazlarınız hesabınızla başarıyla senkronize edildi.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     dlgAuth.Close();
                 }
@@ -795,7 +803,6 @@ namespace AetherDesk.Agent
             tabLogin.Controls.Add(lblLoginPass); tabLogin.Controls.Add(txtLoginPass);
             tabLogin.Controls.Add(btnSubmitLogin);
 
-            // Tab 2: Kayıt Ol
             TabPage tabRegister = new TabPage("Kayıt Ol");
             tabRegister.BackColor = clrCardBg;
 
@@ -838,7 +845,7 @@ namespace AetherDesk.Agent
             dlgAuth.ShowDialog(this);
         }
 
-        // --- IN-APP REMOTE DESKTOP SESSION CANVAS WITH 3-DOTS (⋮) MENU ---
+        // IN-APP REMOTE DESKTOP SESSION CANVAS
         private void BuildActiveSessionPage()
         {
             pnlActiveSession = new Panel();
