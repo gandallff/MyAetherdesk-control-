@@ -39,6 +39,22 @@ namespace AetherDesk.Agent
         [DllImport("user32.dll")]
         static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
 
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION = 0x2;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        private const int DWMWA_CAPTION_COLOR = 35;
+        private const int DWMWA_TEXT_COLOR = 36;
+
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x04;
         private const uint MOUSEEVENTF_RIGHTDOWN = 0x08;
@@ -52,6 +68,17 @@ namespace AetherDesk.Agent
         private Color clrAccentRed = Color.FromArgb(224, 49, 49);
         private Color clrText = Color.FromArgb(248, 250, 252);
         private Color clrMuted = Color.FromArgb(148, 163, 184);
+
+        // Logo Image
+        private Image appLogoImage;
+
+        // Custom Seamless Dark Title Bar
+        private Panel pnlCustomTitleBar;
+        private PictureBox picTitleLogo;
+        private Label lblCustomTitle;
+        private Button btnMin;
+        private Button btnMax;
+        private Button btnClose;
 
         // Main Layout
         private Panel pnlMainWrapper;
@@ -74,7 +101,6 @@ namespace AetherDesk.Agent
         private System.Windows.Forms.Timer sessionTimer;
         private bool isFullscreen = false;
         private FormWindowState prevWindowState;
-        private FormBorderStyle prevBorderStyle;
 
         // Card Controls
         private Label lblIdText;
@@ -104,24 +130,174 @@ namespace AetherDesk.Agent
         {
             this.mySessionId = GetOrCreateUniqueSessionId();
 
-            this.Text = "AetherDesk Remote Control - Premium Remote Desktop";
+            this.Text = "AetherDesk Remote Access - Premium Remote Desktop";
             this.Size = new Size(980, 720);
             this.MinimumSize = new Size(880, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
+            this.FormBorderStyle = FormBorderStyle.None; // Frameless for pure 100% unified dark look!
             this.BackColor = clrBg;
             this.ForeColor = clrText;
             this.Font = new Font("Segoe UI", 9.5f);
             this.DoubleBuffered = true;
 
+            LoadAppLogo();
+            ApplyDarkWindowAttributes();
+
             sessionTimer = new System.Windows.Forms.Timer();
             sessionTimer.Interval = 1000;
             sessionTimer.Tick += (s, e) => UpdateSessionTimer();
 
+            BuildCustomTitleBar();
             BuildModernLayout();
             LoadSettings();
             StartListener();
             StartCloudRelayThread();
             StartInputPollThread();
+        }
+
+        private void ApplyDarkWindowAttributes()
+        {
+            try
+            {
+                int trueVal = 1;
+                DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref trueVal, sizeof(int));
+                DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref trueVal, sizeof(int));
+                
+                int bgrDark = 0x00120F0D; // #0d0f12
+                DwmSetWindowAttribute(this.Handle, DWMWA_CAPTION_COLOR, ref bgrDark, sizeof(int));
+                int bgrText = 0x00FCFAF8;
+                DwmSetWindowAttribute(this.Handle, DWMWA_TEXT_COLOR, ref bgrText, sizeof(int));
+            }
+            catch { }
+        }
+
+        private void LoadAppLogo()
+        {
+            try
+            {
+                string localLogoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "aetherdesk_logo.jpg");
+                if (File.Exists(localLogoPath))
+                {
+                    appLogoImage = Image.FromFile(localLogoPath);
+                    return;
+                }
+                string desktopLogoPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "aetherdesk_logo.jpg");
+                if (File.Exists(desktopLogoPath))
+                {
+                    appLogoImage = Image.FromFile(desktopLogoPath);
+                    return;
+                }
+            }
+            catch { }
+
+            // Embedded default modern vector logo if file not found
+            try
+            {
+                string b64 = "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";
+                byte[] bytes = Convert.FromBase64String(b64);
+                using (MemoryStream ms = new MemoryStream(bytes))
+                {
+                    appLogoImage = Image.FromStream(ms);
+                }
+            }
+            catch { }
+        }
+
+        private void BuildCustomTitleBar()
+        {
+            // Custom Seamless Matte Dark Title Bar
+            pnlCustomTitleBar = new Panel();
+            pnlCustomTitleBar.Dock = DockStyle.Top;
+            pnlCustomTitleBar.Height = 36;
+            pnlCustomTitleBar.BackColor = clrBg; // Exact same background color!
+            pnlCustomTitleBar.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left)
+                {
+                    ReleaseCapture();
+                    SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+                }
+            };
+            this.Controls.Add(pnlCustomTitleBar);
+
+            // Title Logo Icon
+            picTitleLogo = new PictureBox();
+            picTitleLogo.Location = new Point(10, 6);
+            picTitleLogo.Size = new Size(24, 24);
+            picTitleLogo.SizeMode = PictureBoxSizeMode.Zoom;
+            picTitleLogo.Image = appLogoImage;
+            picTitleLogo.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left)
+                {
+                    ReleaseCapture();
+                    SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+                }
+            };
+            pnlCustomTitleBar.Controls.Add(picTitleLogo);
+
+            lblCustomTitle = new Label();
+            lblCustomTitle.Text = "AetherDesk Remote Control - Premium Remote Desktop";
+            lblCustomTitle.Font = new Font("Segoe UI", 9f);
+            lblCustomTitle.ForeColor = Color.FromArgb(203, 213, 225);
+            lblCustomTitle.Location = new Point(40, 9);
+            lblCustomTitle.AutoSize = true;
+            lblCustomTitle.MouseDown += (s, e) => {
+                if (e.Button == MouseButtons.Left)
+                {
+                    ReleaseCapture();
+                    SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+                }
+            };
+            pnlCustomTitleBar.Controls.Add(lblCustomTitle);
+
+            // Close [ ✕ ] Button
+            btnClose = new Button();
+            btnClose.Text = "✕";
+            btnClose.Font = new Font("Segoe UI", 9.5f);
+            btnClose.ForeColor = clrMuted;
+            btnClose.BackColor = Color.Transparent;
+            btnClose.FlatStyle = FlatStyle.Flat;
+            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose.Size = new Size(44, 36);
+            btnClose.Dock = DockStyle.Right;
+            btnClose.Cursor = Cursors.Hand;
+            btnClose.MouseEnter += (s, e) => { btnClose.BackColor = clrAccentRed; btnClose.ForeColor = Color.White; };
+            btnClose.MouseLeave += (s, e) => { btnClose.BackColor = Color.Transparent; btnClose.ForeColor = clrMuted; };
+            btnClose.Click += (s, e) => Application.Exit();
+            pnlCustomTitleBar.Controls.Add(btnClose);
+
+            // Maximize [ ▢ ] Button
+            btnMax = new Button();
+            btnMax.Text = "▢";
+            btnMax.Font = new Font("Segoe UI", 9.5f);
+            btnMax.ForeColor = clrMuted;
+            btnMax.BackColor = Color.Transparent;
+            btnMax.FlatStyle = FlatStyle.Flat;
+            btnMax.FlatAppearance.BorderSize = 0;
+            btnMax.Size = new Size(44, 36);
+            btnMax.Dock = DockStyle.Right;
+            btnMax.Cursor = Cursors.Hand;
+            btnMax.MouseEnter += (s, e) => { btnMax.BackColor = Color.FromArgb(26, 30, 38); };
+            btnMax.MouseLeave += (s, e) => { btnMax.BackColor = Color.Transparent; };
+            btnMax.Click += (s, e) => {
+                this.WindowState = this.WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+            };
+            pnlCustomTitleBar.Controls.Add(btnMax);
+
+            // Minimize [ — ] Button
+            btnMin = new Button();
+            btnMin.Text = "—";
+            btnMin.Font = new Font("Segoe UI", 9.5f);
+            btnMin.ForeColor = clrMuted;
+            btnMin.BackColor = Color.Transparent;
+            btnMin.FlatStyle = FlatStyle.Flat;
+            btnMin.FlatAppearance.BorderSize = 0;
+            btnMin.Size = new Size(44, 36);
+            btnMin.Dock = DockStyle.Right;
+            btnMin.Cursor = Cursors.Hand;
+            btnMin.MouseEnter += (s, e) => { btnMin.BackColor = Color.FromArgb(26, 30, 38); };
+            btnMin.MouseLeave += (s, e) => { btnMin.BackColor = Color.Transparent; };
+            btnMin.Click += (s, e) => this.WindowState = FormWindowState.Minimized;
+            pnlCustomTitleBar.Controls.Add(btnMin);
         }
 
         private void BuildModernLayout()
@@ -131,6 +307,7 @@ namespace AetherDesk.Agent
             pnlMainWrapper.Dock = DockStyle.Fill;
             pnlMainWrapper.BackColor = clrBg;
             this.Controls.Add(pnlMainWrapper);
+            pnlMainWrapper.BringToFront();
 
             // 2. Right-Hand Slide-Out Drawer Menu (Image 3)
             pnlRightMenu = new Panel();
@@ -172,14 +349,22 @@ namespace AetherDesk.Agent
             Panel pnlCardHeader = new Panel();
             pnlCardHeader.Dock = DockStyle.Top;
             pnlCardHeader.Height = 56;
-            pnlCardHeader.Padding = new Padding(20, 14, 20, 0);
+            pnlCardHeader.Padding = new Padding(20, 10, 20, 0);
             pnlCenterCard.Controls.Add(pnlCardHeader);
 
+            // Card Header Logo PictureBox
+            PictureBox picCardLogo = new PictureBox();
+            picCardLogo.Location = new Point(18, 10);
+            picCardLogo.Size = new Size(36, 36);
+            picCardLogo.SizeMode = PictureBoxSizeMode.Zoom;
+            picCardLogo.Image = appLogoImage;
+            pnlCardHeader.Controls.Add(picCardLogo);
+
             Label lblLogo = new Label();
-            lblLogo.Text = "⚡ Remote Access";
+            lblLogo.Text = "AetherDesk Remote Access";
             lblLogo.Font = new Font("Segoe UI", 13.5f, FontStyle.Bold);
             lblLogo.ForeColor = clrText;
-            lblLogo.Location = new Point(20, 14);
+            lblLogo.Location = new Point(60, 14);
             lblLogo.AutoSize = true;
             pnlCardHeader.Controls.Add(lblLogo);
 
@@ -505,6 +690,7 @@ namespace AetherDesk.Agent
             btnBackToMenu.Click += (s, e) => {
                 pnlActiveSession.Visible = false;
                 pnlMainWrapper.Visible = true;
+                pnlCustomTitleBar.Visible = true;
                 pnlMainWrapper.BringToFront();
             };
             pnlSessionTopBar.Controls.Add(btnBackToMenu);
@@ -620,14 +806,13 @@ namespace AetherDesk.Agent
             if (!isFullscreen)
             {
                 prevWindowState = this.WindowState;
-                prevBorderStyle = this.FormBorderStyle;
-                this.FormBorderStyle = FormBorderStyle.None;
+                pnlCustomTitleBar.Visible = false;
                 this.WindowState = FormWindowState.Maximized;
                 isFullscreen = true;
             }
             else
             {
-                this.FormBorderStyle = prevBorderStyle;
+                pnlCustomTitleBar.Visible = true;
                 this.WindowState = prevWindowState;
                 isFullscreen = false;
             }
@@ -642,6 +827,7 @@ namespace AetherDesk.Agent
             lblSessionTargetInfo.Text = "⚡ Canlı Oturum: " + targetId + " (Doğrudan Masaüstü)";
             pnlMainWrapper.Visible = false;
             pnlRightMenu.Visible = false;
+            pnlCustomTitleBar.Visible = false;
             pnlActiveSession.Visible = true;
             pnlActiveSession.BringToFront();
 
@@ -707,6 +893,7 @@ namespace AetherDesk.Agent
             sessionTimer.Stop();
             if (isFullscreen) ToggleFullscreen();
             pnlActiveSession.Visible = false;
+            pnlCustomTitleBar.Visible = true;
             pnlMainWrapper.Visible = true;
             pnlMainWrapper.BringToFront();
         }
@@ -1028,6 +1215,14 @@ namespace AetherDesk.Agent
                             reqStream.Write(screenJpeg, 0, screenJpeg.Length);
                         }
                         using (HttpWebResponse resp = (HttpWebResponse)uploadReq.GetResponse()) { }
+
+                        if (lblOnlineStatus != null && lblOnlineStatus.IsHandleCreated)
+                        {
+                            lblOnlineStatus.Invoke(new Action(() => {
+                                lblOnlineStatus.Text = "🟢 Küresel Bulut Aktif";
+                                lblOnlineStatus.ForeColor = Color.FromArgb(52, 211, 153);
+                            }));
+                        }
                     }
                     catch { }
 
