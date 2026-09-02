@@ -79,6 +79,7 @@ namespace AetherDesk.Agent
         private Button btnHamburger;
         private PictureBox picTitleLogo;
         private Label lblAppBrandTitle;
+        private Label lblUserStatusTag;
         private Button btnUserAvatarBadge;
         private Button btnMin;
         private Button btnMax;
@@ -91,6 +92,13 @@ namespace AetherDesk.Agent
         private Panel pnlCardContainer;
         private bool isLeftSidebarOpen = false;
         private const int SIDEBAR_WIDTH = 240;
+
+        // In-App Welcome & Auth Landing Screen (TeamViewer-style startup gate)
+        private Panel pnlWelcomeAuthScreen;
+        private TextBox txtAuthEmail;
+        private TextBox txtAuthPass;
+        private TextBox txtAuthName;
+        private TabControl tabAuthControls;
 
         // In-App Session Page
         private Panel pnlActiveSession;
@@ -118,12 +126,13 @@ namespace AetherDesk.Agent
         private Button btnConnectTarget;
         private CheckBox chkEasyAccess;
         private Label lblBottomStatusText;
+        private Label lblCommunityAccountStatus;
 
         // Auth & User State
         private bool isLoggedIn = false;
         private string userDisplayName = "Misafir Kullanıcı";
         private string userEmail = "";
-        private string userInitials = "TS";
+        private string userInitials = "MK";
 
         // Security & Permissions
         private bool allowInput = true;
@@ -158,6 +167,7 @@ namespace AetherDesk.Agent
 
             LoadAppLogo();
             ApplyDarkWindowAttributes();
+            LoadSettings();
 
             sessionTimer = new System.Windows.Forms.Timer();
             sessionTimer.Interval = 1000;
@@ -165,10 +175,15 @@ namespace AetherDesk.Agent
 
             BuildCustomTitleBar();
             BuildMainAppLayout();
-            LoadSettings();
             StartListener();
             StartCloudRelayThread();
             StartInputPollThread();
+
+            // If user has not logged in previously, present the Welcome / Community Gate
+            if (!isLoggedIn)
+            {
+                ShowWelcomeAuthScreen();
+            }
         }
 
         private void ApplyDarkWindowAttributes()
@@ -283,15 +298,27 @@ namespace AetherDesk.Agent
             btnUserAvatarBadge.Text = userInitials;
             btnUserAvatarBadge.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             btnUserAvatarBadge.ForeColor = Color.White;
-            btnUserAvatarBadge.BackColor = Color.FromArgb(88, 28, 135);
+            btnUserAvatarBadge.BackColor = isLoggedIn ? Color.FromArgb(16, 185, 129) : Color.FromArgb(100, 116, 139);
             btnUserAvatarBadge.FlatStyle = FlatStyle.Flat;
             btnUserAvatarBadge.FlatAppearance.BorderSize = 0;
-            btnUserAvatarBadge.Size = new Size(32, 32);
+            btnUserAvatarBadge.Size = new Size(34, 32);
             btnUserAvatarBadge.Location = new Point(pnlCustomTitleBar.Width - 175, 6);
             btnUserAvatarBadge.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnUserAvatarBadge.Cursor = Cursors.Hand;
-            btnUserAvatarBadge.Click += (s, e) => ShowLoginRegisterModal();
+            btnUserAvatarBadge.Click += (s, e) => ShowWelcomeAuthScreen();
             pnlCustomTitleBar.Controls.Add(btnUserAvatarBadge);
+
+            lblUserStatusTag = new Label();
+            lblUserStatusTag.Text = isLoggedIn ? userDisplayName : "Kısıtlı (Giriş Yapılmadı)";
+            lblUserStatusTag.Font = new Font("Segoe UI", 8.5f);
+            lblUserStatusTag.ForeColor = isLoggedIn ? Color.FromArgb(52, 211, 153) : Color.FromArgb(245, 158, 11);
+            lblUserStatusTag.Location = new Point(pnlCustomTitleBar.Width - 360, 12);
+            lblUserStatusTag.Size = new Size(180, 20);
+            lblUserStatusTag.TextAlign = ContentAlignment.MiddleRight;
+            lblUserStatusTag.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblUserStatusTag.Cursor = Cursors.Hand;
+            lblUserStatusTag.Click += (s, e) => ShowWelcomeAuthScreen();
+            pnlCustomTitleBar.Controls.Add(lblUserStatusTag);
         }
 
         private Button CreateTitleBtn(string text, EventHandler onClick, bool isClose)
@@ -342,7 +369,7 @@ namespace AetherDesk.Agent
             this.Controls.Add(pnlMainBody);
             pnlMainBody.BringToFront();
 
-            // Left Slide-out Menu (Docked Left, hidden initially)
+            // Left Slide-out Menu
             pnlLeftSidebar = new Panel();
             pnlLeftSidebar.Dock = DockStyle.Left;
             pnlLeftSidebar.Width = SIDEBAR_WIDTH;
@@ -363,11 +390,13 @@ namespace AetherDesk.Agent
 
             BuildTwoColumnWorkflowCards();
 
+            // Build Embedded Welcome/Auth Overlay Gate
+            BuildWelcomeAuthOverlay();
+
             // Active In-App Session Page
             BuildActiveSessionPage();
         }
 
-        // SMOOTH EXPANDING SIDEBAR: Form expands width to the right so content NEVER overlaps!
         private void ToggleLeftSidebar()
         {
             isLeftSidebarOpen = !isLeftSidebarOpen;
@@ -382,7 +411,6 @@ namespace AetherDesk.Agent
                 this.Width -= SIDEBAR_WIDTH;
             }
 
-            // Reposition card container in center
             if (pnlCardContainer != null && pnlMainContent != null)
             {
                 pnlCardContainer.Location = new Point(
@@ -415,7 +443,13 @@ namespace AetherDesk.Agent
             pnlSideHeader.Controls.Add(lblSideBrand);
 
             int top = 65;
-            pnlLeftSidebar.Controls.Add(CreateSidebarBtn("🖥️  Uzaktan Erişim", top, (s, e) => ToggleLeftSidebar()));
+            pnlLeftSidebar.Controls.Add(CreateSidebarBtn("🖥️  Uzaktan Erişim", top, (s, e) => {
+                pnlWelcomeAuthScreen.Visible = false;
+                pnlCardContainer.Visible = true;
+                ToggleLeftSidebar();
+            }));
+            top += 50;
+            pnlLeftSidebar.Controls.Add(CreateSidebarBtn("👥  Topluluk & Ağ", top, (s, e) => ShowCommunityDialog()));
             top += 50;
             pnlLeftSidebar.Controls.Add(CreateSidebarBtn("📱  Adres Defteri", top, (s, e) => ShowAddressBookDialog()));
             top += 50;
@@ -425,7 +459,10 @@ namespace AetherDesk.Agent
             top += 50;
             pnlLeftSidebar.Controls.Add(CreateSidebarBtn("🛡️  Erişim Yetkileri", top, (s, e) => ShowPermissionsDialog()));
             top += 50;
-            pnlLeftSidebar.Controls.Add(CreateSidebarBtn("👤  Hesap / Giriş", top, (s, e) => ShowLoginRegisterModal()));
+            pnlLeftSidebar.Controls.Add(CreateSidebarBtn("👤  Hesap Girişi", top, (s, e) => {
+                ToggleLeftSidebar();
+                ShowWelcomeAuthScreen();
+            }));
             top += 50;
             pnlLeftSidebar.Controls.Add(CreateSidebarBtn("ℹ️  Hakkında", top, (s, e) => ShowAboutDialog()));
         }
@@ -450,11 +487,245 @@ namespace AetherDesk.Agent
             return btn;
         }
 
-        // TWO-COLUMN WORKFLOW CARDS (TeamViewer Layout with Deep Dark Aesthetics)
+        // -----------------------------------------------------------------------------------
+        // EMBEDDED DARK WELCOME / ACCOUNT GATEWAY (TeamViewer Style Onboarding & Community Sync)
+        // -----------------------------------------------------------------------------------
+        private void BuildWelcomeAuthOverlay()
+        {
+            pnlWelcomeAuthScreen = new Panel();
+            pnlWelcomeAuthScreen.Dock = DockStyle.Fill;
+            pnlWelcomeAuthScreen.BackColor = clrBg;
+            pnlWelcomeAuthScreen.Visible = false;
+            pnlMainContent.Controls.Add(pnlWelcomeAuthScreen);
+
+            // Centered Auth Card
+            Panel pnlAuthCard = new Panel();
+            pnlAuthCard.Size = new Size(540, 560);
+            pnlAuthCard.BackColor = clrCardBg;
+            pnlAuthCard.Anchor = AnchorStyles.None;
+            pnlAuthCard.Location = new Point((pnlWelcomeAuthScreen.Width - pnlAuthCard.Width) / 2, (pnlWelcomeAuthScreen.Height - pnlAuthCard.Height) / 2);
+            pnlAuthCard.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1.5f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlAuthCard.Width - 1, pnlAuthCard.Height - 1);
+                }
+            };
+            pnlWelcomeAuthScreen.Controls.Add(pnlAuthCard);
+
+            pnlWelcomeAuthScreen.Resize += (s, e) => {
+                pnlAuthCard.Location = new Point((pnlWelcomeAuthScreen.Width - pnlAuthCard.Width) / 2, (pnlWelcomeAuthScreen.Height - pnlAuthCard.Height) / 2);
+            };
+
+            // Card Header with Logo
+            PictureBox picGateLogo = new PictureBox();
+            picGateLogo.Location = new Point((pnlAuthCard.Width - 48) / 2, 18);
+            picGateLogo.Size = new Size(48, 48);
+            picGateLogo.SizeMode = PictureBoxSizeMode.Zoom;
+            picGateLogo.Image = appLogoImage;
+            pnlAuthCard.Controls.Add(picGateLogo);
+
+            Label lblGateTitle = new Label();
+            lblGateTitle.Text = "AetherDesk Enterprise Topluluğu";
+            lblGateTitle.Font = new Font("Segoe UI", 14, FontStyle.Bold);
+            lblGateTitle.ForeColor = clrText;
+            lblGateTitle.Location = new Point(20, 72);
+            lblGateTitle.Size = new Size(500, 28);
+            lblGateTitle.TextAlign = ContentAlignment.MiddleCenter;
+            pnlAuthCard.Controls.Add(lblGateTitle);
+
+            Label lblGateSub = new Label();
+            lblGateSub.Text = "Cihazlarınızı tek tıkla adres defterine eklemek, şifresiz kolay erişim sağlamak\nve kurumsal topluluk ağına katılmak için hesabınıza giriş yapın.";
+            lblGateSub.Font = new Font("Segoe UI", 8.5f);
+            lblGateSub.ForeColor = clrMuted;
+            lblGateSub.Location = new Point(20, 102);
+            lblGateSub.Size = new Size(500, 36);
+            lblGateSub.TextAlign = ContentAlignment.MiddleCenter;
+            pnlAuthCard.Controls.Add(lblGateSub);
+
+            // Tabbed Login / Register controls
+            tabAuthControls = new TabControl();
+            tabAuthControls.Location = new Point(28, 148);
+            tabAuthControls.Size = new Size(484, 280);
+            tabAuthControls.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            pnlAuthCard.Controls.Add(tabAuthControls);
+
+            // Tab 1: Giriş Yap
+            TabPage tabLogin = new TabPage("🔑  Giriş Yap");
+            tabLogin.BackColor = clrCardBg;
+
+            Label lblE = new Label { Text = "E-posta Adresi:", Location = new Point(14, 18), AutoSize = true, ForeColor = clrMuted };
+            txtAuthEmail = new TextBox { Location = new Point(14, 40), Size = new Size(450, 28), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, Text = userEmail };
+
+            Label lblP = new Label { Text = "Şifre:", Location = new Point(14, 82), AutoSize = true, ForeColor = clrMuted };
+            txtAuthPass = new TextBox { Location = new Point(14, 104), Size = new Size(450, 28), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
+
+            Button btnDoLogin = new Button {
+                Text = "Giriş Yap ve Topluluğa Katıl",
+                Location = new Point(14, 160),
+                Size = new Size(450, 44),
+                BackColor = clrAccentBlue,
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnDoLogin.Click += (s, e) => PerformLoginAction();
+
+            tabLogin.Controls.Add(lblE); tabLogin.Controls.Add(txtAuthEmail);
+            tabLogin.Controls.Add(lblP); tabLogin.Controls.Add(txtAuthPass);
+            tabLogin.Controls.Add(btnDoLogin);
+
+            // Tab 2: Kayıt Ol
+            TabPage tabReg = new TabPage("✨  Yeni Hesap Oluştur");
+            tabReg.BackColor = clrCardBg;
+
+            Label lblN = new Label { Text = "Ad Soyad / Kurum Adı:", Location = new Point(14, 12), AutoSize = true, ForeColor = clrMuted };
+            txtAuthName = new TextBox { Location = new Point(14, 32), Size = new Size(450, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
+
+            Label lblRE = new Label { Text = "E-posta Adresi:", Location = new Point(14, 68), AutoSize = true, ForeColor = clrMuted };
+            TextBox txtRegEmail = new TextBox { Location = new Point(14, 88), Size = new Size(450, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
+
+            Label lblRP = new Label { Text = "Şifre Belirleyin:", Location = new Point(14, 124), AutoSize = true, ForeColor = clrMuted };
+            TextBox txtRegPass = new TextBox { Location = new Point(14, 144), Size = new Size(450, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
+
+            Button btnDoReg = new Button {
+                Text = "Topluluk Hesabı Oluştur",
+                Location = new Point(14, 186),
+                Size = new Size(450, 42),
+                BackColor = Color.FromArgb(16, 185, 129),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnDoReg.Click += (s, e) => {
+                if (!string.IsNullOrEmpty(txtAuthName.Text) && txtRegEmail.Text.Contains("@"))
+                {
+                    txtAuthEmail.Text = txtRegEmail.Text;
+                    userDisplayName = txtAuthName.Text.Trim();
+                    PerformLoginAction();
+                }
+                else
+                {
+                    MessageBox.Show("Lütfen tüm alanları eksiksiz doldurun.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+
+            tabReg.Controls.Add(lblN); tabReg.Controls.Add(txtAuthName);
+            tabReg.Controls.Add(lblRE); tabReg.Controls.Add(txtRegEmail);
+            tabReg.Controls.Add(lblRP); tabReg.Controls.Add(txtRegPass);
+            tabReg.Controls.Add(btnDoReg);
+
+            tabAuthControls.TabPages.Add(tabLogin);
+            tabAuthControls.TabPages.Add(tabReg);
+
+            // SKIP / RESTRICTED GUEST BUTTON (TeamViewer style "Hesap eklemeden kısıtlı olarak genel bağlantı")
+            Button btnSkipGuest = new Button();
+            btnSkipGuest.Text = "⚡  Giriş Yapmadan Devam Et (Kısıtlı Misafir Modu)";
+            btnSkipGuest.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnSkipGuest.ForeColor = Color.FromArgb(203, 213, 225);
+            btnSkipGuest.BackColor = clrInnerBox;
+            btnSkipGuest.FlatStyle = FlatStyle.Flat;
+            btnSkipGuest.FlatAppearance.BorderColor = clrBorder;
+            btnSkipGuest.Location = new Point(28, 444);
+            btnSkipGuest.Size = new Size(484, 42);
+            btnSkipGuest.Cursor = Cursors.Hand;
+            btnSkipGuest.Click += (s, e) => ContinueAsGuestMode();
+            pnlAuthCard.Controls.Add(btnSkipGuest);
+
+            Label lblGuestNotice = new Label();
+            lblGuestNotice.Text = "Not: Kısıtlı modda doğrudan ID ile bağlantı yapılabilir; adres defteri ve topluluk senkronizasyonu devre dışıdır.";
+            lblGuestNotice.Font = new Font("Segoe UI", 7.8f);
+            lblGuestNotice.ForeColor = Color.FromArgb(100, 116, 139);
+            lblGuestNotice.Location = new Point(20, 500);
+            lblGuestNotice.Size = new Size(500, 36);
+            lblGuestNotice.TextAlign = ContentAlignment.MiddleCenter;
+            pnlAuthCard.Controls.Add(lblGuestNotice);
+        }
+
+        private void ShowWelcomeAuthScreen()
+        {
+            pnlCardContainer.Visible = false;
+            pnlWelcomeAuthScreen.Visible = true;
+            pnlWelcomeAuthScreen.BringToFront();
+        }
+
+        private void PerformLoginAction()
+        {
+            if (txtAuthEmail.Text.Contains("@"))
+            {
+                isLoggedIn = true;
+                userEmail = txtAuthEmail.Text.Trim();
+                if (string.IsNullOrEmpty(userDisplayName) || userDisplayName == "Misafir Kullanıcı")
+                {
+                    userDisplayName = userEmail.Split('@')[0];
+                }
+                userInitials = userDisplayName.Substring(0, Math.Min(2, userDisplayName.Length)).ToUpper();
+
+                SaveAuthSettings();
+                UpdateUserInterfaceAuth();
+
+                pnlWelcomeAuthScreen.Visible = false;
+                pnlCardContainer.Visible = true;
+                pnlCardContainer.BringToFront();
+
+                MessageBox.Show(
+                    "Hoş geldiniz, " + userDisplayName + "!\n\n" +
+                    "✓ Bu cihazınız (" + this.mySessionId + ") AetherDesk Topluluk Ağı'na başarıyla eklendi.\n" +
+                    "✓ Adres Defteri ve Şifresiz Kolay Erişim aktif edildi.",
+                    "AetherDesk Enterprise Topluluğu",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            else
+            {
+                MessageBox.Show("Lütfen geçerli bir e-posta adresi girin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ContinueAsGuestMode()
+        {
+            isLoggedIn = false;
+            userDisplayName = "Misafir Kullanıcı";
+            userInitials = "MK";
+            UpdateUserInterfaceAuth();
+
+            pnlWelcomeAuthScreen.Visible = false;
+            pnlCardContainer.Visible = true;
+            pnlCardContainer.BringToFront();
+        }
+
+        private void UpdateUserInterfaceAuth()
+        {
+            if (btnUserAvatarBadge != null)
+            {
+                btnUserAvatarBadge.Text = userInitials;
+                btnUserAvatarBadge.BackColor = isLoggedIn ? Color.FromArgb(16, 185, 129) : Color.FromArgb(100, 116, 139);
+            }
+
+            if (lblUserStatusTag != null)
+            {
+                lblUserStatusTag.Text = isLoggedIn ? userDisplayName : "Kısıtlı (Giriş Yapılmadı)";
+                lblUserStatusTag.ForeColor = isLoggedIn ? Color.FromArgb(52, 211, 153) : Color.FromArgb(245, 158, 11);
+            }
+
+            if (lblCommunityAccountStatus != null)
+            {
+                lblCommunityAccountStatus.Text = isLoggedIn 
+                    ? "🟢 Topluluk Hesabı: " + userDisplayName + " (" + userEmail + ")"
+                    : "⚠️ Kısıtlı Misafir Modu (Adres defteri senkronizasyonu kapalı)";
+                lblCommunityAccountStatus.ForeColor = isLoggedIn ? Color.FromArgb(52, 211, 153) : Color.FromArgb(245, 158, 11);
+            }
+        }
+
+        // ----------------------------------------------------
+        // TWO-COLUMN WORKFLOW CARDS (TeamViewer Layout)
+        // ----------------------------------------------------
         private void BuildTwoColumnWorkflowCards()
         {
             pnlCardContainer = new Panel();
-            pnlCardContainer.Size = new Size(880, 480);
+            pnlCardContainer.Size = new Size(880, 500);
             pnlCardContainer.BackColor = Color.Transparent;
             pnlCardContainer.Anchor = AnchorStyles.None;
             pnlCardContainer.Location = new Point((pnlMainContent.Width - pnlCardContainer.Width) / 2, (pnlMainContent.Height - pnlCardContainer.Height) / 2);
@@ -467,9 +738,43 @@ namespace AetherDesk.Agent
                 );
             };
 
+            // Top Community Status Banner
+            Panel pnlTopCommunityBanner = new Panel();
+            pnlTopCommunityBanner.Location = new Point(0, 0);
+            pnlTopCommunityBanner.Size = new Size(880, 36);
+            pnlTopCommunityBanner.BackColor = clrInnerBox;
+            pnlTopCommunityBanner.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlTopCommunityBanner.Width - 1, pnlTopCommunityBanner.Height - 1);
+                }
+            };
+            pnlCardContainer.Controls.Add(pnlTopCommunityBanner);
+
+            lblCommunityAccountStatus = new Label();
+            lblCommunityAccountStatus.Text = "⚠️ Kısıtlı Misafir Modu (Adres defteri senkronizasyonu kapalı)";
+            lblCommunityAccountStatus.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            lblCommunityAccountStatus.ForeColor = Color.FromArgb(245, 158, 11);
+            lblCommunityAccountStatus.Location = new Point(14, 8);
+            lblCommunityAccountStatus.AutoSize = true;
+            pnlTopCommunityBanner.Controls.Add(lblCommunityAccountStatus);
+
+            Button btnSwitchAuthMode = new Button();
+            btnSwitchAuthMode.Text = "👤 Hesap / Giriş";
+            btnSwitchAuthMode.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnSwitchAuthMode.ForeColor = clrText;
+            btnSwitchAuthMode.BackColor = Color.FromArgb(30, 36, 46);
+            btnSwitchAuthMode.FlatStyle = FlatStyle.Flat;
+            btnSwitchAuthMode.FlatAppearance.BorderSize = 0;
+            btnSwitchAuthMode.Size = new Size(130, 26);
+            btnSwitchAuthMode.Location = new Point(740, 5);
+            btnSwitchAuthMode.Cursor = Cursors.Hand;
+            btnSwitchAuthMode.Click += (s, e) => ShowWelcomeAuthScreen();
+            pnlTopCommunityBanner.Controls.Add(btnSwitchAuthMode);
+
             // LEFT CARD: "Uzaktan Kontrole İzin Ver"
             Panel pnlLeftCard = new Panel();
-            pnlLeftCard.Location = new Point(0, 10);
+            pnlLeftCard.Location = new Point(0, 48);
             pnlLeftCard.Size = new Size(420, 380);
             pnlLeftCard.BackColor = clrCardBg;
             pnlLeftCard.Paint += (s, e) => {
@@ -488,7 +793,6 @@ namespace AetherDesk.Agent
             lblLeftHeader.AutoSize = true;
             pnlLeftCard.Controls.Add(lblLeftHeader);
 
-            // Kimliğiniz (ID Box)
             Panel pnlIdBox = new Panel();
             pnlIdBox.Location = new Point(20, 68);
             pnlIdBox.Size = new Size(380, 84);
@@ -533,7 +837,6 @@ namespace AetherDesk.Agent
             };
             pnlIdBox.Controls.Add(btnCopyId);
 
-            // Parola (Password Box)
             Panel pnlPassBox = new Panel();
             pnlPassBox.Location = new Point(20, 168);
             pnlPassBox.Size = new Size(380, 84);
@@ -609,7 +912,7 @@ namespace AetherDesk.Agent
 
             // RIGHT CARD: "Uzak Cihazı Kontrol Et"
             Panel pnlRightCard = new Panel();
-            pnlRightCard.Location = new Point(450, 10);
+            pnlRightCard.Location = new Point(450, 48);
             pnlRightCard.Size = new Size(430, 380);
             pnlRightCard.BackColor = clrCardBg;
             pnlRightCard.Paint += (s, e) => {
@@ -704,7 +1007,7 @@ namespace AetherDesk.Agent
 
             // BOTTOM STATUS BAR
             Panel pnlBottomStatus = new Panel();
-            pnlBottomStatus.Location = new Point(0, 415);
+            pnlBottomStatus.Location = new Point(0, 445);
             pnlBottomStatus.Size = new Size(880, 40);
             pnlBottomStatus.BackColor = Color.Transparent;
             pnlCardContainer.Controls.Add(pnlBottomStatus);
@@ -756,93 +1059,59 @@ namespace AetherDesk.Agent
             return btn;
         }
 
-        private void ShowLoginRegisterModal()
+        private void ShowCommunityDialog()
         {
-            Form dlgAuth = new Form();
-            dlgAuth.Text = "AetherDesk Hesap Erişimi";
-            dlgAuth.Size = new Size(420, 440);
-            dlgAuth.StartPosition = FormStartPosition.CenterParent;
-            dlgAuth.BackColor = clrCardBg;
-            dlgAuth.ForeColor = clrText;
-            dlgAuth.FormBorderStyle = FormBorderStyle.FixedDialog;
-            dlgAuth.MaximizeBox = false;
+            if (!isLoggedIn)
+            {
+                DialogResult dr = MessageBox.Show(
+                    "Topluluk Cihaz Ağı'na erişmek için lütfen hesabınıza giriş yapın.\n\nŞimdi giriş yapmak ister misiniz?",
+                    "Topluluk Ağı",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information
+                );
+                if (dr == DialogResult.Yes) ShowWelcomeAuthScreen();
+                return;
+            }
 
-            TabControl tabAuth = new TabControl();
-            tabAuth.Dock = DockStyle.Fill;
-            tabAuth.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            MessageBox.Show(
+                "AetherDesk Topluluk Ağı:\n\n" +
+                "👤 Hesap: " + userDisplayName + " (" + userEmail + ")\n" +
+                "🏢 Grup: Genel Ekip & Cihazlar\n\n" +
+                "Kayıtlı Topluluk Cihazlarınız:\n" +
+                "• " + Environment.MachineName + " (" + this.mySessionId + ") [Bu Cihaz - 🟢 Aktif]\n" +
+                "• Merkez Sunucu (482 910 375) [🟢 Çevrimiçi]\n" +
+                "• Ofis Masaüstü (778 375 604) [🟢 Çevrimiçi]\n" +
+                "• Muhasebe Terminali (891 204 153) [🟢 Çevrimiçi]",
+                "AetherDesk Topluluğu",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
 
-            TabPage tabLogin = new TabPage("Giriş Yap");
-            tabLogin.BackColor = clrCardBg;
+        private void ShowAddressBookDialog()
+        {
+            if (!isLoggedIn)
+            {
+                DialogResult dr = MessageBox.Show(
+                    "Adres Defteri ve Otomatik Senkronizasyon için hesabınıza giriş yapmalısınız.\n\nGiriş sayfasına gitmek ister misiniz?",
+                    "Adres Defteri (Kısıtlı)",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information
+                );
+                if (dr == DialogResult.Yes) ShowWelcomeAuthScreen();
+                return;
+            }
 
-            Label lblLoginEmail = new Label { Text = "E-posta Adresi:", Location = new Point(24, 24), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtLoginEmail = new TextBox { Location = new Point(24, 48), Size = new Size(350, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, Text = userEmail };
-
-            Label lblLoginPass = new Label { Text = "Şifre:", Location = new Point(24, 90), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtLoginPass = new TextBox { Location = new Point(24, 114), Size = new Size(350, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
-
-            Button btnSubmitLogin = new Button { Text = "Giriş Yap", Location = new Point(24, 170), Size = new Size(350, 40), BackColor = clrAccentBlue, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
-            btnSubmitLogin.Click += (s, e) => {
-                if (txtLoginEmail.Text.Contains("@"))
-                {
-                    isLoggedIn = true;
-                    userEmail = txtLoginEmail.Text.Trim();
-                    userDisplayName = userEmail.Split('@')[0];
-                    userInitials = userDisplayName.Substring(0, Math.Min(2, userDisplayName.Length)).ToUpper();
-                    btnUserAvatarBadge.Text = userInitials;
-                    btnUserAvatarBadge.BackColor = Color.FromArgb(16, 185, 129);
-                    MessageBox.Show("Hoş geldiniz, " + userDisplayName + "!\nCihazlarınız hesabınızla başarıyla senkronize edildi.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    dlgAuth.Close();
-                }
-                else
-                {
-                    MessageBox.Show("Lütfen geçerli bir e-posta adresi girin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            };
-
-            tabLogin.Controls.Add(lblLoginEmail); tabLogin.Controls.Add(txtLoginEmail);
-            tabLogin.Controls.Add(lblLoginPass); tabLogin.Controls.Add(txtLoginPass);
-            tabLogin.Controls.Add(btnSubmitLogin);
-
-            TabPage tabRegister = new TabPage("Kayıt Ol");
-            tabRegister.BackColor = clrCardBg;
-
-            Label lblRegName = new Label { Text = "Ad Soyad:", Location = new Point(24, 20), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtRegName = new TextBox { Location = new Point(24, 42), Size = new Size(350, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
-
-            Label lblRegEmail = new Label { Text = "E-posta Adresi:", Location = new Point(24, 80), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtRegEmail = new TextBox { Location = new Point(24, 102), Size = new Size(350, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
-
-            Label lblRegPass = new Label { Text = "Şifre Belirleyin:", Location = new Point(24, 140), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtRegPass = new TextBox { Location = new Point(24, 162), Size = new Size(350, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
-
-            Button btnSubmitReg = new Button { Text = "Hesap Oluştur", Location = new Point(24, 215), Size = new Size(350, 40), BackColor = Color.FromArgb(16, 185, 129), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
-            btnSubmitReg.Click += (s, e) => {
-                if (!string.IsNullOrEmpty(txtRegName.Text) && txtRegEmail.Text.Contains("@"))
-                {
-                    isLoggedIn = true;
-                    userEmail = txtRegEmail.Text.Trim();
-                    userDisplayName = txtRegName.Text.Trim();
-                    userInitials = userDisplayName.Substring(0, Math.Min(2, userDisplayName.Length)).ToUpper();
-                    btnUserAvatarBadge.Text = userInitials;
-                    btnUserAvatarBadge.BackColor = Color.FromArgb(16, 185, 129);
-                    MessageBox.Show("Hesabınız oluşturuldu!\nHoş geldiniz, " + userDisplayName, "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    dlgAuth.Close();
-                }
-                else
-                {
-                    MessageBox.Show("Lütfen tüm alanları eksiksiz doldurun.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            };
-
-            tabRegister.Controls.Add(lblRegName); tabRegister.Controls.Add(txtRegName);
-            tabRegister.Controls.Add(lblRegEmail); tabRegister.Controls.Add(txtRegEmail);
-            tabRegister.Controls.Add(lblRegPass); tabRegister.Controls.Add(txtRegPass);
-            tabRegister.Controls.Add(btnSubmitReg);
-
-            tabAuth.TabPages.Add(tabLogin);
-            tabAuth.TabPages.Add(tabRegister);
-            dlgAuth.Controls.Add(tabAuth);
-            dlgAuth.ShowDialog(this);
+            MessageBox.Show(
+                "Senkronize Adres Defteriniz:\n\n" +
+                "1. Ofis Bilgisayarı (778 375 604) - 🟢 Online\n" +
+                "2. Ana Sunucu (482 910 375) - 🟢 Online\n" +
+                "3. Muhasebe (891 204 153) - 🟢 Online\n\n" +
+                "Topluluk hesabınız ile tüm cihazlar güncel tutulmaktadır.",
+                "Adres Defteri",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
         }
 
         // IN-APP REMOTE DESKTOP SESSION CANVAS
@@ -1172,11 +1441,6 @@ namespace AetherDesk.Agent
             });
         }
 
-        private void ShowAddressBookDialog()
-        {
-            MessageBox.Show("Kayıtlı Cihazlar:\n\n1. Ofis Bilgisayarı (778 375 604) - 🟢 Online\n2. Ana Sunucu (482 910 375) - 🟢 Online\n3. Muhasebe (891 204 153) - 🟢 Online", "Adres Defteri", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
         private void ShowSecurityDialog()
         {
             Form dlg = new Form();
@@ -1236,7 +1500,7 @@ namespace AetherDesk.Agent
 
         private void ShowAboutDialog()
         {
-            MessageBox.Show("AetherDesk Enterprise\nVersiyon: v2.3.0 (2026 Edition)\n\nUçtan uca şifreli, yüksek performanslı yeni nesil uzaktan yönetim sistemi.", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("AetherDesk Enterprise\nVersiyon: v2.4.0 (2026 Edition)\n\nUçtan uca şifreli, yüksek performanslı yeni nesil uzaktan yönetim sistemi.", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void LoadSettings()
@@ -1249,6 +1513,10 @@ namespace AetherDesk.Agent
                     allowInput = bool.Parse((key.GetValue("AllowInput") ?? "True").ToString());
                     allowFiles = bool.Parse((key.GetValue("AllowFiles") ?? "True").ToString());
                     allowClip = bool.Parse((key.GetValue("AllowClip") ?? "True").ToString());
+                    isLoggedIn = bool.Parse((key.GetValue("IsLoggedIn") ?? "False").ToString());
+                    userEmail = (key.GetValue("UserEmail") ?? "").ToString();
+                    userDisplayName = (key.GetValue("UserDisplayName") ?? "Misafir Kullanıcı").ToString();
+                    userInitials = (key.GetValue("UserInitials") ?? "MK").ToString();
                 }
             }
             catch { }
@@ -1276,6 +1544,21 @@ namespace AetherDesk.Agent
                 {
                     key.SetValue("AccessMode", accessMode);
                     key.SetValue("AccessPassword", accessPassword);
+                }
+            }
+            catch { }
+        }
+
+        private void SaveAuthSettings()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
+                {
+                    key.SetValue("IsLoggedIn", isLoggedIn.ToString());
+                    key.SetValue("UserEmail", userEmail);
+                    key.SetValue("UserDisplayName", userDisplayName);
+                    key.SetValue("UserInitials", userInitials);
                 }
             }
             catch { }
