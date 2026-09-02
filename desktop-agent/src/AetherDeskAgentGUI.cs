@@ -93,8 +93,9 @@ namespace AetherDesk.Agent
         private bool isLeftSidebarOpen = false;
         private const int SIDEBAR_WIDTH = 240;
 
-        // In-App Welcome & Auth Landing Screen (TeamViewer-style startup gate)
+        // In-App Welcome & Auth Landing Screen
         private Panel pnlWelcomeAuthScreen;
+        private TextBox txtDirectQuickId;
         private TextBox txtAuthEmail;
         private TextBox txtAuthPass;
         private TextBox txtAuthName;
@@ -179,11 +180,8 @@ namespace AetherDesk.Agent
             StartCloudRelayThread();
             StartInputPollThread();
 
-            // If user has not logged in previously, present the Welcome / Community Gate
-            if (!isLoggedIn)
-            {
-                ShowWelcomeAuthScreen();
-            }
+            // Default startup view: show direct entry with ID or Email tabs
+            ShowWelcomeAuthScreen();
         }
 
         private void ApplyDarkWindowAttributes()
@@ -223,7 +221,7 @@ namespace AetherDesk.Agent
 
             try
             {
-                string b64 = "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";
+                string b64 = "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";
                 byte[] bytes = Convert.FromBase64String(b64);
                 using (MemoryStream ms = new MemoryStream(bytes))
                 {
@@ -251,7 +249,6 @@ namespace AetherDesk.Agent
             pnlCustomTitleBar.MouseDown += (s, e) => DragWindow(e);
             this.Controls.Add(pnlCustomTitleBar);
 
-            // 3-Line Hamburger Button on Top-Left Corner
             btnHamburger = new Button();
             btnHamburger.Text = "☰";
             btnHamburger.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -265,7 +262,6 @@ namespace AetherDesk.Agent
             btnHamburger.Click += (s, e) => ToggleLeftSidebar();
             pnlCustomTitleBar.Controls.Add(btnHamburger);
 
-            // Title Logo Icon
             picTitleLogo = new PictureBox();
             picTitleLogo.Location = new Point(50, 7);
             picTitleLogo.Size = new Size(30, 30);
@@ -274,7 +270,6 @@ namespace AetherDesk.Agent
             picTitleLogo.MouseDown += (s, e) => DragWindow(e);
             pnlCustomTitleBar.Controls.Add(picTitleLogo);
 
-            // Brand Title
             lblAppBrandTitle = new Label();
             lblAppBrandTitle.Text = "AetherDesk Remote Access";
             lblAppBrandTitle.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
@@ -284,7 +279,6 @@ namespace AetherDesk.Agent
             lblAppBrandTitle.MouseDown += (s, e) => DragWindow(e);
             pnlCustomTitleBar.Controls.Add(lblAppBrandTitle);
 
-            // Window Controls (Right side)
             btnClose = CreateTitleBtn("✕", (s, e) => Application.Exit(), true);
             btnMax = CreateTitleBtn("▢", (s, e) => ToggleMaximize(), false);
             btnMin = CreateTitleBtn("—", (s, e) => this.WindowState = FormWindowState.Minimized, false);
@@ -293,7 +287,6 @@ namespace AetherDesk.Agent
             pnlCustomTitleBar.Controls.Add(btnMax);
             pnlCustomTitleBar.Controls.Add(btnMin);
 
-            // User Profile Badge / Login Button
             btnUserAvatarBadge = new Button();
             btnUserAvatarBadge.Text = userInitials;
             btnUserAvatarBadge.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
@@ -389,11 +382,7 @@ namespace AetherDesk.Agent
             pnlMainContent.BringToFront();
 
             BuildTwoColumnWorkflowCards();
-
-            // Build Embedded Welcome/Auth Overlay Gate
             BuildWelcomeAuthOverlay();
-
-            // Active In-App Session Page
             BuildActiveSessionPage();
         }
 
@@ -488,7 +477,8 @@ namespace AetherDesk.Agent
         }
 
         // -----------------------------------------------------------------------------------
-        // EMBEDDED DARK WELCOME / ACCOUNT GATEWAY (TeamViewer Style Onboarding & Community Sync)
+        // EMBEDDED DARK WELCOME / ACCOUNT & DIRECT ID GATEWAY
+        // Directly allows connecting via ID without account, while email login is an alternative!
         // -----------------------------------------------------------------------------------
         private void BuildWelcomeAuthOverlay()
         {
@@ -498,9 +488,8 @@ namespace AetherDesk.Agent
             pnlWelcomeAuthScreen.Visible = false;
             pnlMainContent.Controls.Add(pnlWelcomeAuthScreen);
 
-            // Centered Auth Card
             Panel pnlAuthCard = new Panel();
-            pnlAuthCard.Size = new Size(540, 560);
+            pnlAuthCard.Size = new Size(580, 580);
             pnlAuthCard.BackColor = clrCardBg;
             pnlAuthCard.Anchor = AnchorStyles.None;
             pnlAuthCard.Location = new Point((pnlWelcomeAuthScreen.Width - pnlAuthCard.Width) / 2, (pnlWelcomeAuthScreen.Height - pnlAuthCard.Height) / 2);
@@ -518,81 +507,172 @@ namespace AetherDesk.Agent
 
             // Card Header with Logo
             PictureBox picGateLogo = new PictureBox();
-            picGateLogo.Location = new Point((pnlAuthCard.Width - 48) / 2, 18);
+            picGateLogo.Location = new Point((pnlAuthCard.Width - 48) / 2, 16);
             picGateLogo.Size = new Size(48, 48);
             picGateLogo.SizeMode = PictureBoxSizeMode.Zoom;
             picGateLogo.Image = appLogoImage;
             pnlAuthCard.Controls.Add(picGateLogo);
 
             Label lblGateTitle = new Label();
-            lblGateTitle.Text = "AetherDesk Enterprise Topluluğu";
+            lblGateTitle.Text = "AetherDesk Remote Access";
             lblGateTitle.Font = new Font("Segoe UI", 14, FontStyle.Bold);
             lblGateTitle.ForeColor = clrText;
-            lblGateTitle.Location = new Point(20, 72);
-            lblGateTitle.Size = new Size(500, 28);
+            lblGateTitle.Location = new Point(20, 68);
+            lblGateTitle.Size = new Size(540, 28);
             lblGateTitle.TextAlign = ContentAlignment.MiddleCenter;
             pnlAuthCard.Controls.Add(lblGateTitle);
 
             Label lblGateSub = new Label();
-            lblGateSub.Text = "Cihazlarınızı tek tıkla adres defterine eklemek, şifresiz kolay erişim sağlamak\nve kurumsal topluluk ağına katılmak için hesabınıza giriş yapın.";
+            lblGateSub.Text = "İster sadece 9 haneli ID girerek doğrudan bağlanın,\nisterseniz e-posta hesabınızla topluluk ve adres defterinizi senkronize edin.";
             lblGateSub.Font = new Font("Segoe UI", 8.5f);
             lblGateSub.ForeColor = clrMuted;
-            lblGateSub.Location = new Point(20, 102);
-            lblGateSub.Size = new Size(500, 36);
+            lblGateSub.Location = new Point(20, 96);
+            lblGateSub.Size = new Size(540, 36);
             lblGateSub.TextAlign = ContentAlignment.MiddleCenter;
             pnlAuthCard.Controls.Add(lblGateSub);
 
-            // Tabbed Login / Register controls
+            // Tabbed System:
+            // TAB 1: ⚡ Sadece ID ile Hızlı Bağlan (Hesapsız)
+            // TAB 2: 🔑 E-posta ile Giriş Yap (Alternatif)
+            // TAB 3: ✨ Yeni Hesap Oluştur
             tabAuthControls = new TabControl();
-            tabAuthControls.Location = new Point(28, 148);
-            tabAuthControls.Size = new Size(484, 280);
-            tabAuthControls.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            tabAuthControls.Location = new Point(24, 140);
+            tabAuthControls.Size = new Size(532, 330);
+            tabAuthControls.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             pnlAuthCard.Controls.Add(tabAuthControls);
 
-            // Tab 1: Giriş Yap
-            TabPage tabLogin = new TabPage("🔑  Giriş Yap");
-            tabLogin.BackColor = clrCardBg;
+            // -----------------------------------------------------------------
+            // TAB 1: SADECE ID İLE HIZLI BAĞLANTI (HESAP GİRİŞİNDEN TAMAMEN BAĞIMSIZ)
+            // -----------------------------------------------------------------
+            TabPage tabDirectId = new TabPage("⚡  Sadece ID ile Bağlan");
+            tabDirectId.BackColor = clrCardBg;
 
-            Label lblE = new Label { Text = "E-posta Adresi:", Location = new Point(14, 18), AutoSize = true, ForeColor = clrMuted };
-            txtAuthEmail = new TextBox { Location = new Point(14, 40), Size = new Size(450, 28), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, Text = userEmail };
+            // My ID quick reminder box
+            Panel pnlMyIdMiniBox = new Panel();
+            pnlMyIdMiniBox.Location = new Point(14, 16);
+            pnlMyIdMiniBox.Size = new Size(496, 52);
+            pnlMyIdMiniBox.BackColor = clrInnerBox;
+            pnlMyIdMiniBox.Paint += (s, e) => {
+                using (SolidBrush b = new SolidBrush(clrAccentRed))
+                {
+                    e.Graphics.FillRectangle(b, 0, 0, 4, pnlMyIdMiniBox.Height);
+                }
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlMyIdMiniBox.Width - 1, pnlMyIdMiniBox.Height - 1);
+                }
+            };
+            tabDirectId.Controls.Add(pnlMyIdMiniBox);
 
-            Label lblP = new Label { Text = "Şifre:", Location = new Point(14, 82), AutoSize = true, ForeColor = clrMuted };
-            txtAuthPass = new TextBox { Location = new Point(14, 104), Size = new Size(450, 28), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
+            Label lblMyIdMiniTag = new Label { Text = "BU CİHAZIN ADRESİ (ID):", Location = new Point(14, 6), AutoSize = true, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = clrMuted };
+            Label lblMyIdMiniVal = new Label { Text = this.mySessionId, Location = new Point(14, 22), AutoSize = true, Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = clrText };
+            Button btnCopyMini = new Button { Text = "📋", Location = new Point(450, 10), Size = new Size(36, 32), FlatStyle = FlatStyle.Flat, BackColor = Color.Transparent, ForeColor = clrMuted };
+            btnCopyMini.FlatAppearance.BorderSize = 0;
+            btnCopyMini.Click += (s, e) => {
+                Clipboard.SetText(this.mySessionId.Replace(" ", ""));
+                btnCopyMini.ForeColor = Color.FromArgb(52, 211, 153);
+            };
+            pnlMyIdMiniBox.Controls.Add(lblMyIdMiniTag);
+            pnlMyIdMiniBox.Controls.Add(lblMyIdMiniVal);
+            pnlMyIdMiniBox.Controls.Add(btnCopyMini);
 
-            Button btnDoLogin = new Button {
-                Text = "Giriş Yap ve Topluluğa Katıl",
-                Location = new Point(14, 160),
-                Size = new Size(450, 44),
+            // Remote Target ID Input
+            Label lblTargetPrompt = new Label { Text = "Bağlanılacak Uzak Cihazın ID'sini Girin:", Location = new Point(14, 82), AutoSize = true, ForeColor = clrMuted, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+            txtDirectQuickId = new TextBox {
+                Location = new Point(14, 106),
+                Size = new Size(496, 30),
+                BackColor = clrInnerBox,
+                ForeColor = Color.FromArgb(56, 189, 248),
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Consolas", 14, FontStyle.Bold),
+                Text = ""
+            };
+            txtDirectQuickId.KeyDown += (s, e) => {
+                if (e.KeyCode == Keys.Enter) PerformDirectIdConnect();
+            };
+
+            Button btnDirectConnect = new Button {
+                Text = "⚡  Doğrudan Uzak Masastüne Bağlan",
+                Location = new Point(14, 152),
+                Size = new Size(496, 46),
                 BackColor = clrAccentBlue,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
+            btnDirectConnect.Click += (s, e) => PerformDirectIdConnect();
+
+            Label lblDirectInfo = new Label {
+                Text = "✓ Hesap açmanıza gerek yoktur. Karşı tarafın 9 haneli ID'sini yazarak anında tam kontrollü oturum başlatabilirsiniz.",
+                Location = new Point(14, 212),
+                Size = new Size(496, 34),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Font = new Font("Segoe UI", 8.2f)
+            };
+
+            tabDirectId.Controls.Add(lblTargetPrompt);
+            tabDirectId.Controls.Add(txtDirectQuickId);
+            tabDirectId.Controls.Add(btnDirectConnect);
+            tabDirectId.Controls.Add(lblDirectInfo);
+
+            // -----------------------------------------------------------------
+            // TAB 2: ALTERNATİF E-POSTA İLE GİRİŞ & TOPLULUK EŞLEME
+            // -----------------------------------------------------------------
+            TabPage tabLogin = new TabPage("🔑  E-posta ile Giriş (Alternatif)");
+            tabLogin.BackColor = clrCardBg;
+
+            Label lblE = new Label { Text = "E-posta Adresi:", Location = new Point(14, 14), AutoSize = true, ForeColor = clrMuted };
+            txtAuthEmail = new TextBox { Location = new Point(14, 36), Size = new Size(496, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, Text = userEmail };
+
+            Label lblP = new Label { Text = "Şifre:", Location = new Point(14, 76), AutoSize = true, ForeColor = clrMuted };
+            txtAuthPass = new TextBox { Location = new Point(14, 98), Size = new Size(496, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
+
+            Button btnDoLogin = new Button {
+                Text = "Giriş Yap ve Topluluk Senkronizasyonunu Aç",
+                Location = new Point(14, 146),
+                Size = new Size(496, 44),
+                BackColor = Color.FromArgb(16, 185, 129),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
             btnDoLogin.Click += (s, e) => PerformLoginAction();
+
+            Label lblAltInfo = new Label {
+                Text = "Topluluk hesabınızla giriş yaptığınızda adres defteriniz, kayıtlı cihazlarınız ve şifresiz katılımsız erişimleriniz otomatik yüklenir.",
+                Location = new Point(14, 206),
+                Size = new Size(496, 36),
+                ForeColor = Color.FromArgb(148, 163, 184),
+                Font = new Font("Segoe UI", 8.2f)
+            };
 
             tabLogin.Controls.Add(lblE); tabLogin.Controls.Add(txtAuthEmail);
             tabLogin.Controls.Add(lblP); tabLogin.Controls.Add(txtAuthPass);
             tabLogin.Controls.Add(btnDoLogin);
+            tabLogin.Controls.Add(lblAltInfo);
 
-            // Tab 2: Kayıt Ol
-            TabPage tabReg = new TabPage("✨  Yeni Hesap Oluştur");
+            // -----------------------------------------------------------------
+            // TAB 3: YENİ HESAP OLUŞTUR
+            // -----------------------------------------------------------------
+            TabPage tabReg = new TabPage("✨  Kayıt Ol");
             tabReg.BackColor = clrCardBg;
 
-            Label lblN = new Label { Text = "Ad Soyad / Kurum Adı:", Location = new Point(14, 12), AutoSize = true, ForeColor = clrMuted };
-            txtAuthName = new TextBox { Location = new Point(14, 32), Size = new Size(450, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
+            Label lblN = new Label { Text = "Ad Soyad / Kurum Adı:", Location = new Point(14, 10), AutoSize = true, ForeColor = clrMuted };
+            txtAuthName = new TextBox { Location = new Point(14, 30), Size = new Size(496, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
 
-            Label lblRE = new Label { Text = "E-posta Adresi:", Location = new Point(14, 68), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtRegEmail = new TextBox { Location = new Point(14, 88), Size = new Size(450, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
+            Label lblRE = new Label { Text = "E-posta Adresi:", Location = new Point(14, 66), AutoSize = true, ForeColor = clrMuted };
+            TextBox txtRegEmail = new TextBox { Location = new Point(14, 86), Size = new Size(496, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle };
 
-            Label lblRP = new Label { Text = "Şifre Belirleyin:", Location = new Point(14, 124), AutoSize = true, ForeColor = clrMuted };
-            TextBox txtRegPass = new TextBox { Location = new Point(14, 144), Size = new Size(450, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
+            Label lblRP = new Label { Text = "Şifre Belirleyin:", Location = new Point(14, 122), AutoSize = true, ForeColor = clrMuted };
+            TextBox txtRegPass = new TextBox { Location = new Point(14, 142), Size = new Size(496, 26), BackColor = clrInnerBox, ForeColor = clrText, BorderStyle = BorderStyle.FixedSingle, UseSystemPasswordChar = true };
 
             Button btnDoReg = new Button {
                 Text = "Topluluk Hesabı Oluştur",
                 Location = new Point(14, 186),
-                Size = new Size(450, 42),
-                BackColor = Color.FromArgb(16, 185, 129),
+                Size = new Size(496, 42),
+                BackColor = Color.FromArgb(37, 99, 235),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold),
@@ -616,31 +696,43 @@ namespace AetherDesk.Agent
             tabReg.Controls.Add(lblRP); tabReg.Controls.Add(txtRegPass);
             tabReg.Controls.Add(btnDoReg);
 
+            tabAuthControls.TabPages.Add(tabDirectId);
             tabAuthControls.TabPages.Add(tabLogin);
             tabAuthControls.TabPages.Add(tabReg);
 
-            // SKIP / RESTRICTED GUEST BUTTON (TeamViewer style "Hesap eklemeden kısıtlı olarak genel bağlantı")
-            Button btnSkipGuest = new Button();
-            btnSkipGuest.Text = "⚡  Giriş Yapmadan Devam Et (Kısıtlı Misafir Modu)";
-            btnSkipGuest.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            btnSkipGuest.ForeColor = Color.FromArgb(203, 213, 225);
-            btnSkipGuest.BackColor = clrInnerBox;
-            btnSkipGuest.FlatStyle = FlatStyle.Flat;
-            btnSkipGuest.FlatAppearance.BorderColor = clrBorder;
-            btnSkipGuest.Location = new Point(28, 444);
-            btnSkipGuest.Size = new Size(484, 42);
-            btnSkipGuest.Cursor = Cursors.Hand;
-            btnSkipGuest.Click += (s, e) => ContinueAsGuestMode();
-            pnlAuthCard.Controls.Add(btnSkipGuest);
+            // BOTTOM ACTION: "Gelişmiş Çalışma Paneline Geç"
+            Button btnGoToDashboard = new Button();
+            btnGoToDashboard.Text = "🖥️  Gelişmiş Çift Kartlı Çalışma Paneline Geç (Masaüstü Görünümü) →";
+            btnGoToDashboard.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnGoToDashboard.ForeColor = Color.FromArgb(203, 213, 225);
+            btnGoToDashboard.BackColor = clrInnerBox;
+            btnGoToDashboard.FlatStyle = FlatStyle.Flat;
+            btnGoToDashboard.FlatAppearance.BorderColor = clrBorder;
+            btnGoToDashboard.Location = new Point(24, 490);
+            btnGoToDashboard.Size = new Size(532, 44);
+            btnGoToDashboard.Cursor = Cursors.Hand;
+            btnGoToDashboard.Click += (s, e) => SwitchToMainDashboard();
+            pnlAuthCard.Controls.Add(btnGoToDashboard);
+        }
 
-            Label lblGuestNotice = new Label();
-            lblGuestNotice.Text = "Not: Kısıtlı modda doğrudan ID ile bağlantı yapılabilir; adres defteri ve topluluk senkronizasyonu devre dışıdır.";
-            lblGuestNotice.Font = new Font("Segoe UI", 7.8f);
-            lblGuestNotice.ForeColor = Color.FromArgb(100, 116, 139);
-            lblGuestNotice.Location = new Point(20, 500);
-            lblGuestNotice.Size = new Size(500, 36);
-            lblGuestNotice.TextAlign = ContentAlignment.MiddleCenter;
-            pnlAuthCard.Controls.Add(lblGuestNotice);
+        private void PerformDirectIdConnect()
+        {
+            string target = txtDirectQuickId.Text.Trim().Replace(" ", "");
+            if (!string.IsNullOrEmpty(target))
+            {
+                StartInAppSession(target);
+            }
+            else
+            {
+                MessageBox.Show("Lütfen bağlanmak istediğiniz 9 haneli cihaz ID'sini girin.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void SwitchToMainDashboard()
+        {
+            pnlWelcomeAuthScreen.Visible = false;
+            pnlCardContainer.Visible = true;
+            pnlCardContainer.BringToFront();
         }
 
         private void ShowWelcomeAuthScreen()
@@ -648,6 +740,7 @@ namespace AetherDesk.Agent
             pnlCardContainer.Visible = false;
             pnlWelcomeAuthScreen.Visible = true;
             pnlWelcomeAuthScreen.BringToFront();
+            if (txtDirectQuickId != null) txtDirectQuickId.Focus();
         }
 
         private void PerformLoginAction()
@@ -682,18 +775,6 @@ namespace AetherDesk.Agent
             {
                 MessageBox.Show("Lütfen geçerli bir e-posta adresi girin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-        }
-
-        private void ContinueAsGuestMode()
-        {
-            isLoggedIn = false;
-            userDisplayName = "Misafir Kullanıcı";
-            userInitials = "MK";
-            UpdateUserInterfaceAuth();
-
-            pnlWelcomeAuthScreen.Visible = false;
-            pnlCardContainer.Visible = true;
-            pnlCardContainer.BringToFront();
         }
 
         private void UpdateUserInterfaceAuth()
@@ -760,14 +841,14 @@ namespace AetherDesk.Agent
             pnlTopCommunityBanner.Controls.Add(lblCommunityAccountStatus);
 
             Button btnSwitchAuthMode = new Button();
-            btnSwitchAuthMode.Text = "👤 Hesap / Giriş";
+            btnSwitchAuthMode.Text = "⚡ Hızlı Giriş / ID Ekranı";
             btnSwitchAuthMode.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             btnSwitchAuthMode.ForeColor = clrText;
             btnSwitchAuthMode.BackColor = Color.FromArgb(30, 36, 46);
             btnSwitchAuthMode.FlatStyle = FlatStyle.Flat;
             btnSwitchAuthMode.FlatAppearance.BorderSize = 0;
-            btnSwitchAuthMode.Size = new Size(130, 26);
-            btnSwitchAuthMode.Location = new Point(740, 5);
+            btnSwitchAuthMode.Size = new Size(160, 26);
+            btnSwitchAuthMode.Location = new Point(710, 5);
             btnSwitchAuthMode.Cursor = Cursors.Hand;
             btnSwitchAuthMode.Click += (s, e) => ShowWelcomeAuthScreen();
             pnlTopCommunityBanner.Controls.Add(btnSwitchAuthMode);
@@ -1500,7 +1581,7 @@ namespace AetherDesk.Agent
 
         private void ShowAboutDialog()
         {
-            MessageBox.Show("AetherDesk Enterprise\nVersiyon: v2.4.0 (2026 Edition)\n\nUçtan uca şifreli, yüksek performanslı yeni nesil uzaktan yönetim sistemi.", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("AetherDesk Enterprise\nVersiyon: v2.5.0 (2026 Edition)\n\nUçtan uca şifreli, yüksek performanslı yeni nesil uzaktan yönetim sistemi.", "Hakkında", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void LoadSettings()
