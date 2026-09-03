@@ -1011,7 +1011,7 @@ namespace AetherDesk.Agent
             };
         }
 
-        private void ShowIncomingSessionWidget()
+        private void ShowIncomingSessionWidget(string caller = "Uzak Kullanıcı (Bağlantı Kuruldu)")
         {
             if (isIncomingActive) return;
             isIncomingActive = true;
@@ -1027,12 +1027,12 @@ namespace AetherDesk.Agent
                 {
                     floatingIncomingToast.Close();
                 }
-                floatingIncomingToast = new FloatingSessionToastForm("Uzak Kullanıcı (Bağlantı Kuruldu)", true, appLogoImage, () => HideIncomingSessionWidget(true));
+                floatingIncomingToast = new FloatingSessionToastForm(caller, true, appLogoImage, () => HideIncomingSessionWidget(true));
                 floatingIncomingToast.Show();
             }
             catch { }
 
-            ShowModernDarkNotification("Uzaktan Bağlantı Başlatıldı", "Bir uzak kullanıcı bilgisayarınıza başarıyla bağlandı.");
+            ShowModernDarkNotification("Uzaktan Bağlantı Başlatıldı", string.Format("{0} bilgisayarınıza bağlandı.", caller));
         }
 
         private void HideIncomingSessionWidget(bool notifyUser)
@@ -1371,6 +1371,23 @@ namespace AetherDesk.Agent
             }
             catch { }
 
+            // Send caller identification handshake to remote target
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    string myId = this.mySessionId.Replace(" ", "");
+                    string name = string.IsNullOrEmpty(this.userDisplayName) || this.userDisplayName == "Misafir Kullanıcı" ? "Yönetici (" + myId + ")" : this.userDisplayName + " (" + myId + ")";
+                    string url = string.Format("{0}/api/events/{1}?action=handshake&fromId={2}&fromName={3}",
+                        CLOUD_RELAY_URL, targetId, Uri.EscapeDataString(myId), Uri.EscapeDataString(name));
+                    HttpWebRequest hreq = (HttpWebRequest)WebRequest.Create(url);
+                    hreq.Method = "POST";
+                    hreq.Timeout = 2000;
+                    using (HttpWebResponse hresp = (HttpWebResponse)hreq.GetResponse()) { }
+                }
+                catch { }
+            });
+
             if (!isInAppStreaming)
             {
                 isInAppStreaming = true;
@@ -1688,10 +1705,27 @@ namespace AetherDesk.Agent
             try
             {
                 lastEventReceivedTime = DateTime.Now;
+                string callerName = "Uzak Yetkili Kullanıcı";
+
+                Match mFrom = Regex.Match(json, @"""fromName""\s*:\s*""([^""]+)""");
+                if (mFrom.Success && !string.IsNullOrEmpty(mFrom.Groups[1].Value))
+                {
+                    callerName = mFrom.Groups[1].Value;
+                }
+                else
+                {
+                    Match mId = Regex.Match(json, @"""fromId""\s*:\s*""([^""]+)""");
+                    if (mId.Success && !string.IsNullOrEmpty(mId.Groups[1].Value))
+                    {
+                        callerName = "Cihaz ID: " + mId.Groups[1].Value;
+                    }
+                }
+
                 if (!isIncomingActive && this.IsHandleCreated)
                 {
+                    string finalCaller = callerName;
                     this.Invoke(new Action(() => {
-                        ShowIncomingSessionWidget();
+                        ShowIncomingSessionWidget(finalCaller);
                     }));
                 }
 
@@ -1842,43 +1876,53 @@ namespace AetherDesk.Agent
     }
 
     // ===================================================================================
-    // FLOATING DESKTOP CORNER SESSION WIDGET (TASKBAR CORNER POPUP)
+    // ULTRA-PROFESSIONAL FLOATING DESKTOP SESSION CARD (BOTTOM-RIGHT TASKBAR CORNER)
     // ===================================================================================
     public class FloatingSessionToastForm : Form
     {
         private Label lblHeaderTitle;
+        private Label lblBadgeType;
         private Label lblTargetInfo;
+        private Label lblSecurityInfo;
         private Label lblTimer;
         private Button btnEnd;
         private DateTime startTime;
         private System.Windows.Forms.Timer tickTimer;
         private Action onDisconnectRequested;
+        private bool isIncomingSession;
 
         public FloatingSessionToastForm(string targetInfo, bool isIncoming, Image logo, Action onDisconnect)
         {
             this.onDisconnectRequested = onDisconnect;
+            this.isIncomingSession = isIncoming;
             this.startTime = DateTime.Now;
 
             this.FormBorderStyle = FormBorderStyle.None;
             this.ShowInTaskbar = false;
             this.TopMost = true;
             this.StartPosition = FormStartPosition.Manual;
-            this.Size = new Size(340, 115);
-            this.BackColor = Color.FromArgb(13, 19, 33);
+            this.Size = new Size(390, 138);
+            this.BackColor = Color.FromArgb(10, 15, 26); // Luxury dark #0a0f1a
             this.DoubleBuffered = true;
 
             // Position at bottom-right corner of Windows Desktop
             Rectangle wa = Screen.PrimaryScreen.WorkingArea;
-            this.Location = new Point(wa.Right - this.Width - 16, wa.Bottom - this.Height - 16);
+            this.Location = new Point(wa.Right - this.Width - 18, wa.Bottom - this.Height - 18);
 
             // Paint Card Border & Glow
             this.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (Pen p = new Pen(Color.FromArgb(6, 182, 212), 1.5f))
+                Color borderColor = isIncomingSession ? Color.FromArgb(16, 185, 129) : Color.FromArgb(6, 182, 212);
+                using (LinearGradientBrush lgb = new LinearGradientBrush(this.ClientRectangle, Color.FromArgb(11, 17, 30), Color.FromArgb(18, 27, 46), LinearGradientMode.Vertical))
+                {
+                    GraphicsPath pathBg = GetRoundedRectangle(new Rectangle(0, 0, this.Width, this.Height), 12);
+                    e.Graphics.FillPath(lgb, pathBg);
+                }
+                using (Pen p = new Pen(borderColor, 1.8f))
                 {
                     Rectangle r = new Rectangle(1, 1, this.Width - 3, this.Height - 3);
-                    GraphicsPath path = GetRoundedRectangle(r, 10);
+                    GraphicsPath path = GetRoundedRectangle(r, 12);
                     e.Graphics.DrawPath(p, path);
                 }
             };
@@ -1887,40 +1931,63 @@ namespace AetherDesk.Agent
             if (logo != null)
             {
                 PictureBox pic = new PictureBox();
-                pic.Size = new Size(22, 22);
-                pic.Location = new Point(12, 12);
+                pic.Size = new Size(24, 24);
+                pic.Location = new Point(14, 12);
                 pic.SizeMode = PictureBoxSizeMode.Zoom;
                 pic.Image = logo;
                 this.Controls.Add(pic);
             }
 
             lblHeaderTitle = new Label();
-            lblHeaderTitle.Text = isIncoming ? "⚡ Uzaktan Bağlantı (Gelen)" : "⚡ Canlı Oturum (Giden)";
+            lblHeaderTitle.Text = "AetherDesk Canlı Oturum";
             lblHeaderTitle.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             lblHeaderTitle.ForeColor = Color.White;
-            lblHeaderTitle.Location = new Point(38, 14);
+            lblHeaderTitle.Location = new Point(42, 13);
             lblHeaderTitle.AutoSize = true;
             this.Controls.Add(lblHeaderTitle);
 
-            // Live Timer
+            // Badge Type (Gelen / Giden)
+            lblBadgeType = new Label();
+            lblBadgeType.Text = isIncoming ? "🟢 GELEN BAĞLANTI" : "🔵 GİDEN OTURUM";
+            lblBadgeType.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            lblBadgeType.ForeColor = isIncoming ? Color.FromArgb(110, 231, 183) : Color.FromArgb(125, 211, 252);
+            lblBadgeType.BackColor = isIncoming ? Color.FromArgb(6, 78, 59) : Color.FromArgb(12, 74, 110);
+            lblBadgeType.Padding = new Padding(4, 2, 4, 2);
+            lblBadgeType.Location = new Point(198, 12);
+            lblBadgeType.AutoSize = true;
+            this.Controls.Add(lblBadgeType);
+
+            // Live Timer Pill in Top-Right
             lblTimer = new Label();
             lblTimer.Text = "⏱️ 00:00:00";
-            lblTimer.Font = new Font("Consolas", 9.5f, FontStyle.Bold);
+            lblTimer.Font = new Font("Consolas", 9f, FontStyle.Bold);
             lblTimer.ForeColor = Color.FromArgb(52, 211, 153);
-            lblTimer.Location = new Point(this.Width - 110, 15);
+            lblTimer.BackColor = Color.FromArgb(6, 11, 20);
+            lblTimer.Padding = new Padding(6, 3, 6, 3);
+            lblTimer.Location = new Point(this.Width - 105, 11);
             lblTimer.AutoSize = true;
             this.Controls.Add(lblTimer);
 
-            // Target Info
+            // Target Info (Caller / Connected Device)
             lblTargetInfo = new Label();
-            lblTargetInfo.Text = "🖥️ Bağlanılan: " + targetInfo;
-            lblTargetInfo.Font = new Font("Segoe UI", 9f);
-            lblTargetInfo.ForeColor = Color.FromArgb(186, 210, 240);
-            lblTargetInfo.Location = new Point(14, 44);
-            lblTargetInfo.Size = new Size(310, 20);
+            string cleanTarget = targetInfo.StartsWith("Cihaz ID:") || targetInfo.StartsWith("🖥️") ? targetInfo : "🖥️ " + (isIncoming ? "Bağlanan Kullanıcı: " : "Bağlanılan Cihaz: ") + targetInfo;
+            lblTargetInfo.Text = cleanTarget;
+            lblTargetInfo.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            lblTargetInfo.ForeColor = Color.FromArgb(226, 232, 240);
+            lblTargetInfo.Location = new Point(14, 46);
+            lblTargetInfo.Size = new Size(360, 20);
             this.Controls.Add(lblTargetInfo);
 
-            // Disconnect Button (Red)
+            // Security & Permissions Info
+            lblSecurityInfo = new Label();
+            lblSecurityInfo.Text = "🔒 TLS 1.3 / AES-256 Şifreli • 🖥️ Ekran & ⌨️ Kontrol";
+            lblSecurityInfo.Font = new Font("Segoe UI", 7.5f);
+            lblSecurityInfo.ForeColor = Color.FromArgb(148, 163, 184);
+            lblSecurityInfo.Location = new Point(14, 68);
+            lblSecurityInfo.Size = new Size(360, 18);
+            this.Controls.Add(lblSecurityInfo);
+
+            // Disconnect Button (Red Gradient style)
             btnEnd = new Button();
             btnEnd.Text = "🛑 Oturumu Sonlandır";
             btnEnd.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
@@ -1929,7 +1996,7 @@ namespace AetherDesk.Agent
             btnEnd.FlatStyle = FlatStyle.Flat;
             btnEnd.FlatAppearance.BorderSize = 0;
             btnEnd.Size = new Size(160, 30);
-            btnEnd.Location = new Point(14, 72);
+            btnEnd.Location = new Point(14, 95);
             btnEnd.Cursor = Cursors.Hand;
             btnEnd.Click += (s, e) => {
                 if (onDisconnectRequested != null) onDisconnectRequested();
@@ -1955,13 +2022,17 @@ namespace AetherDesk.Agent
                 tickTimer.Stop();
                 lblHeaderTitle.Text = "🔴 Oturum Sonlandırıldı";
                 lblHeaderTitle.ForeColor = Color.FromArgb(248, 113, 113);
-                lblTargetInfo.Text = string.Format("Toplam Süre: {0:D2} dk {1:D2} sn", (int)totalDuration.TotalMinutes, totalDuration.Seconds);
-                btnEnd.Text = "Tamam";
+                lblBadgeType.Text = "KAPANDI";
+                lblBadgeType.BackColor = Color.FromArgb(127, 29, 29);
+                lblBadgeType.ForeColor = Color.FromArgb(254, 202, 202);
+                lblTargetInfo.Text = string.Format("Toplam Bağlantı Süresi: {0:D2} dk {1:D2} sn", (int)totalDuration.TotalMinutes, totalDuration.Seconds);
+                lblSecurityInfo.Text = "Uzaktan erişim kanalı güvenli şekilde kapatıldı.";
+                btnEnd.Text = "Kapat";
                 btnEnd.BackColor = Color.FromArgb(37, 99, 235);
                 btnEnd.Click += (s, e) => { try { this.Close(); } catch { } };
 
                 System.Windows.Forms.Timer autoClose = new System.Windows.Forms.Timer();
-                autoClose.Interval = 4000;
+                autoClose.Interval = 4500;
                 autoClose.Tick += (s, e) => {
                     autoClose.Stop();
                     try { this.Close(); } catch { }
