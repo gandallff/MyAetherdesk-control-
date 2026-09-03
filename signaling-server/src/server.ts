@@ -247,8 +247,9 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/screen/')) {
     const sessionId = pathname.replace('/api/screen/', '').replace(/[\s\-]/g, '');
     const screenData = screenBuffers.get(sessionId);
+    const isFresh = screenData && screenData.buffer && (Date.now() - (screenData.updatedAt || 0) < 5500);
 
-    if (screenData && screenData.buffer) {
+    if (isFresh) {
       res.writeHead(200, {
         'Content-Type': 'image/jpeg',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -257,8 +258,34 @@ const server = http.createServer((req, res) => {
       res.end(screenData.buffer);
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'No screen frame available' }));
+      res.end(JSON.stringify({ error: 'Device is offline or stream inactive', isOffline: true }));
     }
+    return;
+  }
+
+  // 3.1 Device Online Status Query
+  if (pathname.startsWith('/api/status/')) {
+    const sessionId = pathname.replace('/api/status/', '').replace(/[\s\-]/g, '');
+    if (url.searchParams.get('offline') === 'true') {
+      screenBuffers.delete(sessionId);
+      activeSessions.delete(sessionId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, status: 'OFFLINE' }));
+      return;
+    }
+
+    const screenData = screenBuffers.get(sessionId);
+    const session = activeSessions.get(sessionId);
+    const isOnline = (screenData && (Date.now() - (screenData.updatedAt || 0) < 5500)) ||
+                     (session && (Date.now() - session.lastSeen < 6000));
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true,
+      sessionId,
+      online: Boolean(isOnline),
+      lastSeenMs: session ? (Date.now() - session.lastSeen) : -1
+    }));
     return;
   }
 

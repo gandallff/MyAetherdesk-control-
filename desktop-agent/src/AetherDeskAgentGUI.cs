@@ -732,14 +732,57 @@ namespace AetherDesk.Agent
         private void PerformJoinSession()
         {
             string target = txtJoinSessionCode.Text.Trim().Replace(" ", "");
-            if (!string.IsNullOrEmpty(target) && !target.StartsWith("Oturum"))
-            {
-                StartInAppSession(target);
-            }
-            else
+            if (string.IsNullOrEmpty(target) || target.StartsWith("Oturum"))
             {
                 MessageBox.Show("Lütfen geçerli bir oturum kodu / ID girin.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
+
+            btnJoinSession.Text = "Kontrol ediliyor...";
+            btnJoinSession.Enabled = false;
+
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                bool isOnline = false;
+                try
+                {
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/status/" + target);
+                    req.Method = "GET";
+                    req.Timeout = 3000;
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                    using (StreamReader sr = new StreamReader(resp.GetResponseStream()))
+                    {
+                        string respJson = sr.ReadToEnd();
+                        if (respJson.Contains("\"online\":true"))
+                        {
+                            isOnline = true;
+                        }
+                    }
+                }
+                catch { }
+
+                if (this.IsHandleCreated)
+                {
+                    this.Invoke(new Action(() =>
+                    {
+                        btnJoinSession.Text = "Oturuma katıl";
+                        btnJoinSession.Enabled = true;
+
+                        if (isOnline)
+                        {
+                            StartInAppSession(target);
+                        }
+                        else
+                        {
+                            ShowModernDarkNotification(
+                                "Cihaz Çevrimdışı (Offline)",
+                                string.Format("{0} numaralı cihaz şu anda çevrimdışı veya AetherDesk uygulaması kapalı.\n\nLütfen karşı tarafın AetherDesk uygulamasını açtığından emin olun.", target)
+                            );
+                        }
+                    }));
+                }
+            });
         }
 
         // -----------------------------------------------------------------------------------
@@ -1394,8 +1437,10 @@ namespace AetherDesk.Agent
                 inAppStreamThread = new Thread(() =>
                 {
                     ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    int consecutiveFailures = 0;
                     while (isInAppStreaming)
                     {
+                        bool frameSuccess = false;
                         try
                         {
                             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/screen/" + targetId);
@@ -1422,10 +1467,35 @@ namespace AetherDesk.Agent
                                             }));
                                         }
                                     }
+                                    frameSuccess = true;
+                                    consecutiveFailures = 0;
                                 }
                             }
                         }
-                        catch { }
+                        catch
+                        {
+                            frameSuccess = false;
+                        }
+
+                        if (!frameSuccess)
+                        {
+                            consecutiveFailures++;
+                            // If target stopped transmitting frames for ~3.5 seconds (7 cycles * 500ms)
+                            if (consecutiveFailures >= 7)
+                            {
+                                if (this.IsHandleCreated)
+                                {
+                                    this.Invoke(new Action(() => {
+                                        CloseInAppSession();
+                                        ShowModernDarkNotification(
+                                            "Bağlantı Kesildi",
+                                            string.Format("{0} cihazı ile olan uzaktan oturum sonlandırıldı.\nKarşı taraf uygulamayı kapattı veya internet bağlantısı koptu.", targetId)
+                                        );
+                                    }));
+                                }
+                                break;
+                            }
+                        }
 
                         Thread.Sleep(150);
                     }
@@ -1872,6 +1942,27 @@ namespace AetherDesk.Agent
                 if (codec.FormatID == format.Guid) return codec;
             }
             return null;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            try
+            {
+                string myId = this.mySessionId.Replace(" ", "");
+                ThreadPool.QueueUserWorkItem((s) => {
+                    try
+                    {
+                        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/status/" + myId + "?offline=true");
+                        req.Method = "GET";
+                        req.Timeout = 1500;
+                        using (HttpWebResponse r = (HttpWebResponse)req.GetResponse()) { }
+                    }
+                    catch { }
+                });
+            }
+            catch { }
+            base.OnFormClosing(e);
         }
     }
 
