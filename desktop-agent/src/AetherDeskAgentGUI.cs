@@ -82,6 +82,7 @@ namespace AetherDesk.Agent
         private PictureBox picTitleLogo;
         private Label lblAppBrandTitle;
         private Button btnSettingsGear;
+        private Button btnHistoryTitle;
         private Button btnMin;
         private Button btnMax;
         private Button btnClose;
@@ -90,6 +91,16 @@ namespace AetherDesk.Agent
         private Panel pnlMainBody;
         private Panel pnlLeftHero;
         private Panel pnlRightContent;
+
+        // Incoming Connection Widget (For Host being controlled)
+        private Panel pnlIncomingWidget;
+        private Label lblIncomingInfo;
+        private Label lblIncomingDuration;
+        private Button btnIncomingDisconnect;
+        private bool isIncomingActive = false;
+        private DateTime incomingStartTime;
+        private DateTime lastEventReceivedTime = DateTime.MinValue;
+        private System.Windows.Forms.Timer incomingPollTimer;
 
         // Right Content Controls
         private Label lblMyIdDisplay;
@@ -102,8 +113,6 @@ namespace AetherDesk.Agent
         private CheckBox chkStartWithWindows;
         private CheckBox chkEasyAccess;
 
-
-
         // In-App Active Session View
         private Panel pnlActiveSession;
         private PictureBox picSessionViewport;
@@ -111,6 +120,7 @@ namespace AetherDesk.Agent
         private Label lblSessionTargetInfo;
         private Label lblSessionDuration;
         private Button btnSessionThreeDots;
+        private Button btnSessionDisconnect;
         private ContextMenuStrip menuThreeDots;
         private Thread inAppStreamThread;
         private bool isInAppStreaming = false;
@@ -278,6 +288,19 @@ namespace AetherDesk.Agent
             btnSettingsGear.Cursor = Cursors.Hand;
             btnSettingsGear.Click += (s, e) => ShowSettingsDialog();
             pnlCustomTitleBar.Controls.Add(btnSettingsGear);
+
+            btnHistoryTitle = new Button();
+            btnHistoryTitle.Text = "📋";
+            btnHistoryTitle.Font = new Font("Segoe UI", 10.5f);
+            btnHistoryTitle.ForeColor = clrTextMuted;
+            btnHistoryTitle.BackColor = Color.Transparent;
+            btnHistoryTitle.FlatStyle = FlatStyle.Flat;
+            btnHistoryTitle.FlatAppearance.BorderSize = 0;
+            btnHistoryTitle.Size = new Size(38, 42);
+            btnHistoryTitle.Dock = DockStyle.Right;
+            btnHistoryTitle.Cursor = Cursors.Hand;
+            btnHistoryTitle.Click += (s, e) => ShowSessionHistoryDialog();
+            pnlCustomTitleBar.Controls.Add(btnHistoryTitle);
         }
 
         private Button CreateTitleBtn(string text, EventHandler onClick, bool isClose)
@@ -330,6 +353,8 @@ namespace AetherDesk.Agent
             pnlMainBody.BackColor = clrWindowBg;
             this.Controls.Add(pnlMainBody);
             pnlMainBody.BringToFront();
+
+            BuildIncomingSessionWidget();
 
             // 1. LEFT HERO BANNER (Smooth Gradient drawn via Paint with anti-aliased GDI+)
             pnlLeftHero = new Panel();
@@ -922,6 +947,222 @@ namespace AetherDesk.Agent
         }
 
         // -----------------------------------------------------------------------------------
+        // INCOMING SESSION WIDGET (ON HOST BEING CONTROLLED)
+        // -----------------------------------------------------------------------------------
+        private void BuildIncomingSessionWidget()
+        {
+            pnlIncomingWidget = new Panel();
+            pnlIncomingWidget.Dock = DockStyle.Top;
+            pnlIncomingWidget.Height = 46;
+            pnlIncomingWidget.BackColor = Color.FromArgb(16, 85, 45); // Dark Emerald Green
+            pnlIncomingWidget.Padding = new Padding(14, 6, 14, 6);
+            pnlIncomingWidget.Visible = false;
+            pnlMainBody.Controls.Add(pnlIncomingWidget);
+            pnlIncomingWidget.BringToFront();
+
+            lblIncomingInfo = new Label();
+            lblIncomingInfo.Text = "🟢 Bu Bilgisayara Uzaktan Bağlanıldı (Canlı Kontrol Ediliyor)";
+            lblIncomingInfo.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblIncomingInfo.ForeColor = Color.White;
+            lblIncomingInfo.Location = new Point(14, 12);
+            lblIncomingInfo.AutoSize = true;
+            pnlIncomingWidget.Controls.Add(lblIncomingInfo);
+
+            lblIncomingDuration = new Label();
+            lblIncomingDuration.Text = "⏱️ 00:00:00";
+            lblIncomingDuration.Font = new Font("Consolas", 9.5f, FontStyle.Bold);
+            lblIncomingDuration.ForeColor = Color.FromArgb(187, 247, 208);
+            lblIncomingDuration.Location = new Point(460, 12);
+            lblIncomingDuration.AutoSize = true;
+            pnlIncomingWidget.Controls.Add(lblIncomingDuration);
+
+            btnIncomingDisconnect = new Button();
+            btnIncomingDisconnect.Text = "🛑 Bağlantıyı Kes";
+            btnIncomingDisconnect.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnIncomingDisconnect.ForeColor = Color.White;
+            btnIncomingDisconnect.BackColor = Color.FromArgb(220, 38, 38);
+            btnIncomingDisconnect.FlatStyle = FlatStyle.Flat;
+            btnIncomingDisconnect.FlatAppearance.BorderSize = 0;
+            btnIncomingDisconnect.Size = new Size(130, 30);
+            btnIncomingDisconnect.Location = new Point(pnlIncomingWidget.Width - 146, 8);
+            btnIncomingDisconnect.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnIncomingDisconnect.Cursor = Cursors.Hand;
+            btnIncomingDisconnect.Click += (s, e) => {
+                HideIncomingSessionWidget(true);
+            };
+            pnlIncomingWidget.Controls.Add(btnIncomingDisconnect);
+
+            incomingPollTimer = new System.Windows.Forms.Timer();
+            incomingPollTimer.Interval = 1000;
+            incomingPollTimer.Tick += (s, e) => {
+                if (isIncomingActive)
+                {
+                    TimeSpan dur = DateTime.Now - incomingStartTime;
+                    lblIncomingDuration.Text = string.Format("⏱️ {0:D2}:{1:D2}:{2:D2}", (int)dur.TotalHours, dur.Minutes, dur.Seconds);
+
+                    // If no event received for 12 seconds, mark incoming session ended
+                    if ((DateTime.Now - lastEventReceivedTime).TotalSeconds > 12)
+                    {
+                        HideIncomingSessionWidget(true);
+                    }
+                }
+            };
+        }
+
+        private void ShowIncomingSessionWidget()
+        {
+            if (isIncomingActive) return;
+            isIncomingActive = true;
+            incomingStartTime = DateTime.Now;
+            lastEventReceivedTime = DateTime.Now;
+            pnlIncomingWidget.Visible = true;
+            pnlIncomingWidget.BringToFront();
+            incomingPollTimer.Start();
+            ShowModernDarkNotification("Uzaktan Bağlantı Başlatıldı", "Bir uzak kullanıcı bilgisayarınıza başarıyla bağlandı.");
+        }
+
+        private void HideIncomingSessionWidget(bool notifyUser)
+        {
+            if (!isIncomingActive) return;
+            isIncomingActive = false;
+            incomingPollTimer.Stop();
+            pnlIncomingWidget.Visible = false;
+
+            TimeSpan dur = DateTime.Now - incomingStartTime;
+            AddSessionHistory("Gelen Bağlantı", "Uzak Kullanıcı", dur, "Sonlandırıldı");
+
+            if (notifyUser)
+            {
+                ShowModernDarkNotification(
+                    "Oturum Sonlandırıldı",
+                    string.Format("Karşı taraf ile olan uzaktan bağlantı sonlandırılmıştır.\nToplam Süre: {0:D2} dk {1:D2} sn", (int)dur.TotalMinutes, dur.Seconds)
+                );
+            }
+        }
+
+        // -----------------------------------------------------------------------------------
+        // SESSION HISTORY PERSISTENCE & DIALOG
+        // -----------------------------------------------------------------------------------
+        private string GetHistoryFilePath()
+        {
+            string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AetherDesk");
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+            return Path.Combine(folder, "session_history.txt");
+        }
+
+        private void AddSessionHistory(string type, string targetId, TimeSpan duration, string status)
+        {
+            try
+            {
+                string line = string.Format("{0:yyyy-MM-dd HH:mm:ss}|{1}|{2}|{3:D2}:{4:D2}:{5:D2}|{6}",
+                    DateTime.Now, type, targetId, (int)duration.TotalHours, duration.Minutes, duration.Seconds, status);
+                File.AppendAllLines(GetHistoryFilePath(), new string[] { line });
+            }
+            catch { }
+        }
+
+        private void ShowSessionHistoryDialog()
+        {
+            Form histForm = new Form();
+            histForm.Text = "AetherDesk - Bağlantı ve Oturum Geçmişi";
+            histForm.Size = new Size(680, 480);
+            histForm.StartPosition = FormStartPosition.CenterParent;
+            histForm.BackColor = clrWindowBg;
+            histForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+            histForm.MaximizeBox = false;
+            histForm.MinimizeBox = false;
+
+            Panel pnlTop = new Panel();
+            pnlTop.Dock = DockStyle.Top;
+            pnlTop.Height = 55;
+            pnlTop.BackColor = clrCardBg;
+            pnlTop.Padding = new Padding(16, 12, 16, 12);
+            histForm.Controls.Add(pnlTop);
+
+            Label lblTitle = new Label();
+            lblTitle.Text = "📋 Bağlantı ve Oturum Geçmişi (Session History)";
+            lblTitle.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            lblTitle.ForeColor = clrTextLight;
+            lblTitle.Location = new Point(16, 14);
+            lblTitle.AutoSize = true;
+            pnlTop.Controls.Add(lblTitle);
+
+            ListView lvHistory = new ListView();
+            lvHistory.Dock = DockStyle.Fill;
+            lvHistory.View = View.Details;
+            lvHistory.FullRowSelect = true;
+            lvHistory.GridLines = true;
+            lvHistory.BackColor = clrInnerBox;
+            lvHistory.ForeColor = clrTextLight;
+            lvHistory.Font = new Font("Segoe UI", 9f);
+            lvHistory.Columns.Add("Tarih & Saat", 150);
+            lvHistory.Columns.Add("Bağlantı Türü", 130);
+            lvHistory.Columns.Add("Cihaz / Hedef ID", 140);
+            lvHistory.Columns.Add("Bağlantı Süresi", 110);
+            lvHistory.Columns.Add("Durum", 100);
+            histForm.Controls.Add(lvHistory);
+            lvHistory.BringToFront();
+
+            string path = GetHistoryFilePath();
+            if (File.Exists(path))
+            {
+                string[] lines = File.ReadAllLines(path);
+                Array.Reverse(lines);
+                foreach (string l in lines)
+                {
+                    if (string.IsNullOrEmpty(l)) continue;
+                    string[] parts = l.Split('|');
+                    if (parts.Length >= 5)
+                    {
+                        ListViewItem item = new ListViewItem(parts[0]);
+                        item.SubItems.Add(parts[1]);
+                        item.SubItems.Add(parts[2]);
+                        item.SubItems.Add(parts[3]);
+                        item.SubItems.Add(parts[4]);
+                        lvHistory.Items.Add(item);
+                    }
+                }
+            }
+
+            Panel pnlBottom = new Panel();
+            pnlBottom.Dock = DockStyle.Bottom;
+            pnlBottom.Height = 52;
+            pnlBottom.BackColor = clrCardBg;
+            histForm.Controls.Add(pnlBottom);
+
+            Button btnClear = new Button();
+            btnClear.Text = "🗑️ Geçmişi Temizle";
+            btnClear.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnClear.ForeColor = Color.FromArgb(239, 68, 68);
+            btnClear.BackColor = clrInnerBox;
+            btnClear.FlatStyle = FlatStyle.Flat;
+            btnClear.FlatAppearance.BorderColor = clrBorder;
+            btnClear.Size = new Size(140, 34);
+            btnClear.Location = new Point(16, 9);
+            btnClear.Cursor = Cursors.Hand;
+            btnClear.Click += (s, e) => {
+                try { File.Delete(path); } catch {}
+                lvHistory.Items.Clear();
+            };
+            pnlBottom.Controls.Add(btnClear);
+
+            Button btnCloseHist = new Button();
+            btnCloseHist.Text = "Kapat";
+            btnCloseHist.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnCloseHist.ForeColor = Color.White;
+            btnCloseHist.BackColor = Color.FromArgb(37, 99, 235);
+            btnCloseHist.FlatStyle = FlatStyle.Flat;
+            btnCloseHist.FlatAppearance.BorderSize = 0;
+            btnCloseHist.Size = new Size(95, 34);
+            btnCloseHist.Location = new Point(histForm.Width - 128, 9);
+            btnCloseHist.Cursor = Cursors.Hand;
+            btnCloseHist.Click += (s, e) => histForm.Close();
+            pnlBottom.Controls.Add(btnCloseHist);
+
+            histForm.ShowDialog(this);
+        }
+
+        // -----------------------------------------------------------------------------------
         // IN-APP REMOTE DESKTOP LIVE CANVAS
         // -----------------------------------------------------------------------------------
         private void BuildActiveSessionPage()
@@ -949,12 +1190,7 @@ namespace AetherDesk.Agent
             btnBackToMenu.Size = new Size(100, 30);
             btnBackToMenu.Location = new Point(12, 8);
             btnBackToMenu.Cursor = Cursors.Hand;
-            btnBackToMenu.Click += (s, e) => {
-                pnlActiveSession.Visible = false;
-                pnlMainBody.Visible = true;
-                pnlCustomTitleBar.Visible = true;
-                pnlMainBody.BringToFront();
-            };
+            btnBackToMenu.Click += (s, e) => CloseInAppSession();
             pnlSessionTopBar.Controls.Add(btnBackToMenu);
 
             lblSessionTargetInfo = new Label();
@@ -973,6 +1209,20 @@ namespace AetherDesk.Agent
             lblSessionDuration.AutoSize = true;
             pnlSessionTopBar.Controls.Add(lblSessionDuration);
 
+            btnSessionDisconnect = new Button();
+            btnSessionDisconnect.Text = "🛑 Bağlantıyı Sonlandır";
+            btnSessionDisconnect.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnSessionDisconnect.ForeColor = Color.White;
+            btnSessionDisconnect.BackColor = Color.FromArgb(220, 38, 38);
+            btnSessionDisconnect.FlatStyle = FlatStyle.Flat;
+            btnSessionDisconnect.FlatAppearance.BorderSize = 0;
+            btnSessionDisconnect.Size = new Size(150, 30);
+            btnSessionDisconnect.Location = new Point(pnlActiveSession.Width - 215, 8);
+            btnSessionDisconnect.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSessionDisconnect.Cursor = Cursors.Hand;
+            btnSessionDisconnect.Click += (s, e) => CloseInAppSession();
+            pnlSessionTopBar.Controls.Add(btnSessionDisconnect);
+
             btnSessionThreeDots = new Button();
             btnSessionThreeDots.Text = "⋮";
             btnSessionThreeDots.Font = new Font("Segoe UI", 16, FontStyle.Bold);
@@ -980,8 +1230,8 @@ namespace AetherDesk.Agent
             btnSessionThreeDots.BackColor = clrInnerBox;
             btnSessionThreeDots.FlatStyle = FlatStyle.Flat;
             btnSessionThreeDots.FlatAppearance.BorderColor = clrBorder;
-            btnSessionThreeDots.Size = new Size(42, 32);
-            btnSessionThreeDots.Location = new Point(pnlActiveSession.Width - 58, 7);
+            btnSessionThreeDots.Size = new Size(42, 30);
+            btnSessionThreeDots.Location = new Point(pnlActiveSession.Width - 55, 8);
             btnSessionThreeDots.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSessionThreeDots.Cursor = Cursors.Hand;
             btnSessionThreeDots.Click += (s, e) => ShowSessionThreeDotsMenu();
@@ -1149,13 +1399,23 @@ namespace AetherDesk.Agent
 
         private void CloseInAppSession()
         {
+            if (!isInAppStreaming) return;
             isInAppStreaming = false;
             sessionTimer.Stop();
             if (isFullscreen) ToggleFullscreen();
+
+            TimeSpan dur = DateTime.Now - sessionStartTime;
+            AddSessionHistory("Giden Bağlantı", activeConnectedId, dur, "Sonlandırıldı");
+
             pnlActiveSession.Visible = false;
             pnlCustomTitleBar.Visible = true;
             pnlMainBody.Visible = true;
             pnlMainBody.BringToFront();
+
+            ShowModernDarkNotification(
+                "Oturum Sonlandırıldı",
+                string.Format("{0} cihazı ile olan uzaktan oturum başarıyla sonlandırılmıştır.\nToplam Süre: {1:D2} dk {2:D2} sn", activeConnectedId, (int)dur.TotalMinutes, dur.Seconds)
+            );
         }
 
         private void SendFileToRemote()
@@ -1392,6 +1652,14 @@ namespace AetherDesk.Agent
         {
             try
             {
+                lastEventReceivedTime = DateTime.Now;
+                if (!isIncomingActive && this.IsHandleCreated)
+                {
+                    this.Invoke(new Action(() => {
+                        ShowIncomingSessionWidget();
+                    }));
+                }
+
                 MatchCollection matches = Regex.Matches(json, @"\{[^{}]*\}");
                 foreach (Match m in matches)
                 {
