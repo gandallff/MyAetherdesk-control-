@@ -101,6 +101,8 @@ namespace AetherDesk.Agent
         private DateTime incomingStartTime;
         private DateTime lastEventReceivedTime = DateTime.MinValue;
         private System.Windows.Forms.Timer incomingPollTimer;
+        private FloatingSessionToastForm floatingIncomingToast;
+        private FloatingSessionToastForm floatingOutgoingToast;
 
         // Right Content Controls
         private Label lblMyIdDisplay;
@@ -1018,6 +1020,18 @@ namespace AetherDesk.Agent
             pnlIncomingWidget.Visible = true;
             pnlIncomingWidget.BringToFront();
             incomingPollTimer.Start();
+
+            try
+            {
+                if (floatingIncomingToast != null && !floatingIncomingToast.IsDisposed)
+                {
+                    floatingIncomingToast.Close();
+                }
+                floatingIncomingToast = new FloatingSessionToastForm("Uzak Kullanıcı (Bağlantı Kuruldu)", true, appLogoImage, () => HideIncomingSessionWidget(true));
+                floatingIncomingToast.Show();
+            }
+            catch { }
+
             ShowModernDarkNotification("Uzaktan Bağlantı Başlatıldı", "Bir uzak kullanıcı bilgisayarınıza başarıyla bağlandı.");
         }
 
@@ -1030,6 +1044,11 @@ namespace AetherDesk.Agent
 
             TimeSpan dur = DateTime.Now - incomingStartTime;
             AddSessionHistory("Gelen Bağlantı", "Uzak Kullanıcı", dur, "Sonlandırıldı");
+
+            if (floatingIncomingToast != null && !floatingIncomingToast.IsDisposed)
+            {
+                try { floatingIncomingToast.MarkEnded(dur); } catch { }
+            }
 
             if (notifyUser)
             {
@@ -1341,6 +1360,17 @@ namespace AetherDesk.Agent
             pnlActiveSession.Visible = true;
             pnlActiveSession.BringToFront();
 
+            try
+            {
+                if (floatingOutgoingToast != null && !floatingOutgoingToast.IsDisposed)
+                {
+                    floatingOutgoingToast.Close();
+                }
+                floatingOutgoingToast = new FloatingSessionToastForm(targetId, false, appLogoImage, () => CloseInAppSession());
+                floatingOutgoingToast.Show();
+            }
+            catch { }
+
             if (!isInAppStreaming)
             {
                 isInAppStreaming = true;
@@ -1406,6 +1436,11 @@ namespace AetherDesk.Agent
 
             TimeSpan dur = DateTime.Now - sessionStartTime;
             AddSessionHistory("Giden Bağlantı", activeConnectedId, dur, "Sonlandırıldı");
+
+            if (floatingOutgoingToast != null && !floatingOutgoingToast.IsDisposed)
+            {
+                try { floatingOutgoingToast.MarkEnded(dur); } catch { }
+            }
 
             pnlActiveSession.Visible = false;
             pnlCustomTitleBar.Visible = true;
@@ -1803,6 +1838,149 @@ namespace AetherDesk.Agent
                 if (codec.FormatID == format.Guid) return codec;
             }
             return null;
+        }
+    }
+
+    // ===================================================================================
+    // FLOATING DESKTOP CORNER SESSION WIDGET (TASKBAR CORNER POPUP)
+    // ===================================================================================
+    public class FloatingSessionToastForm : Form
+    {
+        private Label lblHeaderTitle;
+        private Label lblTargetInfo;
+        private Label lblTimer;
+        private Button btnEnd;
+        private DateTime startTime;
+        private System.Windows.Forms.Timer tickTimer;
+        private Action onDisconnectRequested;
+
+        public FloatingSessionToastForm(string targetInfo, bool isIncoming, Image logo, Action onDisconnect)
+        {
+            this.onDisconnectRequested = onDisconnect;
+            this.startTime = DateTime.Now;
+
+            this.FormBorderStyle = FormBorderStyle.None;
+            this.ShowInTaskbar = false;
+            this.TopMost = true;
+            this.StartPosition = FormStartPosition.Manual;
+            this.Size = new Size(340, 115);
+            this.BackColor = Color.FromArgb(13, 19, 33);
+            this.DoubleBuffered = true;
+
+            // Position at bottom-right corner of Windows Desktop
+            Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+            this.Location = new Point(wa.Right - this.Width - 16, wa.Bottom - this.Height - 16);
+
+            // Paint Card Border & Glow
+            this.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (Pen p = new Pen(Color.FromArgb(6, 182, 212), 1.5f))
+                {
+                    Rectangle r = new Rectangle(1, 1, this.Width - 3, this.Height - 3);
+                    GraphicsPath path = GetRoundedRectangle(r, 10);
+                    e.Graphics.DrawPath(p, path);
+                }
+            };
+
+            // Mini Logo
+            if (logo != null)
+            {
+                PictureBox pic = new PictureBox();
+                pic.Size = new Size(22, 22);
+                pic.Location = new Point(12, 12);
+                pic.SizeMode = PictureBoxSizeMode.Zoom;
+                pic.Image = logo;
+                this.Controls.Add(pic);
+            }
+
+            lblHeaderTitle = new Label();
+            lblHeaderTitle.Text = isIncoming ? "⚡ Uzaktan Bağlantı (Gelen)" : "⚡ Canlı Oturum (Giden)";
+            lblHeaderTitle.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblHeaderTitle.ForeColor = Color.White;
+            lblHeaderTitle.Location = new Point(38, 14);
+            lblHeaderTitle.AutoSize = true;
+            this.Controls.Add(lblHeaderTitle);
+
+            // Live Timer
+            lblTimer = new Label();
+            lblTimer.Text = "⏱️ 00:00:00";
+            lblTimer.Font = new Font("Consolas", 9.5f, FontStyle.Bold);
+            lblTimer.ForeColor = Color.FromArgb(52, 211, 153);
+            lblTimer.Location = new Point(this.Width - 110, 15);
+            lblTimer.AutoSize = true;
+            this.Controls.Add(lblTimer);
+
+            // Target Info
+            lblTargetInfo = new Label();
+            lblTargetInfo.Text = "🖥️ Bağlanılan: " + targetInfo;
+            lblTargetInfo.Font = new Font("Segoe UI", 9f);
+            lblTargetInfo.ForeColor = Color.FromArgb(186, 210, 240);
+            lblTargetInfo.Location = new Point(14, 44);
+            lblTargetInfo.Size = new Size(310, 20);
+            this.Controls.Add(lblTargetInfo);
+
+            // Disconnect Button (Red)
+            btnEnd = new Button();
+            btnEnd.Text = "🛑 Oturumu Sonlandır";
+            btnEnd.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnEnd.ForeColor = Color.White;
+            btnEnd.BackColor = Color.FromArgb(220, 38, 38);
+            btnEnd.FlatStyle = FlatStyle.Flat;
+            btnEnd.FlatAppearance.BorderSize = 0;
+            btnEnd.Size = new Size(160, 30);
+            btnEnd.Location = new Point(14, 72);
+            btnEnd.Cursor = Cursors.Hand;
+            btnEnd.Click += (s, e) => {
+                if (onDisconnectRequested != null) onDisconnectRequested();
+                this.Close();
+            };
+            this.Controls.Add(btnEnd);
+
+            tickTimer = new System.Windows.Forms.Timer();
+            tickTimer.Interval = 1000;
+            tickTimer.Tick += (s, e) =>
+            {
+                TimeSpan elapsed = DateTime.Now - startTime;
+                lblTimer.Text = string.Format("⏱️ {0:D2}:{1:D2}:{2:D2}", (int)elapsed.TotalHours, elapsed.Minutes, elapsed.Seconds);
+            };
+            tickTimer.Start();
+        }
+
+        public void MarkEnded(TimeSpan totalDuration)
+        {
+            if (this.IsDisposed) return;
+            try
+            {
+                tickTimer.Stop();
+                lblHeaderTitle.Text = "🔴 Oturum Sonlandırıldı";
+                lblHeaderTitle.ForeColor = Color.FromArgb(248, 113, 113);
+                lblTargetInfo.Text = string.Format("Toplam Süre: {0:D2} dk {1:D2} sn", (int)totalDuration.TotalMinutes, totalDuration.Seconds);
+                btnEnd.Text = "Tamam";
+                btnEnd.BackColor = Color.FromArgb(37, 99, 235);
+                btnEnd.Click += (s, e) => { try { this.Close(); } catch { } };
+
+                System.Windows.Forms.Timer autoClose = new System.Windows.Forms.Timer();
+                autoClose.Interval = 4000;
+                autoClose.Tick += (s, e) => {
+                    autoClose.Stop();
+                    try { this.Close(); } catch { }
+                };
+                autoClose.Start();
+            }
+            catch { }
+        }
+
+        private GraphicsPath GetRoundedRectangle(Rectangle rect, int radius)
+        {
+            GraphicsPath path = new GraphicsPath();
+            int d = radius * 2;
+            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
         }
     }
 }
