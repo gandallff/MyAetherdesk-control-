@@ -1305,9 +1305,22 @@ namespace AetherDesk.Agent
             picSessionViewport.Dock = DockStyle.Fill;
             picSessionViewport.SizeMode = PictureBoxSizeMode.Zoom;
             picSessionViewport.BackColor = Color.Black;
-            picSessionViewport.Cursor = Cursors.Cross;
+            picSessionViewport.Cursor = Cursors.Default;
             pnlActiveSession.Controls.Add(picSessionViewport);
             picSessionViewport.BringToFront();
+
+            DateTime lastMoveTime = DateTime.MinValue;
+            picSessionViewport.MouseMove += (s, e) => {
+                if ((DateTime.Now - lastMoveTime).TotalMilliseconds > 30)
+                {
+                    lastMoveTime = DateTime.Now;
+                    Point norm = TranslateZoomCoordinates(picSessionViewport, e.Location);
+                    if (!norm.IsEmpty)
+                    {
+                        SendRemoteMouse(norm.X, norm.Y, 1920, 1080, "move");
+                    }
+                }
+            };
 
             picSessionViewport.MouseClick += (s, e) => {
                 Point norm = TranslateZoomCoordinates(picSessionViewport, e.Location);
@@ -1445,7 +1458,8 @@ namespace AetherDesk.Agent
                         {
                             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/screen/" + targetId);
                             req.Method = "GET";
-                            req.Timeout = 2000;
+                            req.KeepAlive = true;
+                            req.Timeout = 1500;
 
                             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                             using (Stream s = resp.GetResponseStream())
@@ -1480,8 +1494,8 @@ namespace AetherDesk.Agent
                         if (!frameSuccess)
                         {
                             consecutiveFailures++;
-                            // If target stopped transmitting frames for ~3.5 seconds (7 cycles * 500ms)
-                            if (consecutiveFailures >= 7)
+                            // If target stopped transmitting frames for ~3.5 seconds
+                            if (consecutiveFailures >= 12)
                             {
                                 if (this.IsHandleCreated)
                                 {
@@ -1497,7 +1511,7 @@ namespace AetherDesk.Agent
                             }
                         }
 
-                        Thread.Sleep(150);
+                        Thread.Sleep(20);
                     }
                 });
                 inAppStreamThread.IsBackground = true;
@@ -1719,7 +1733,8 @@ namespace AetherDesk.Agent
                         uploadReq.Method = "POST";
                         uploadReq.ContentType = "image/jpeg";
                         uploadReq.ContentLength = screenJpeg.Length;
-                        uploadReq.Timeout = 2000;
+                        uploadReq.KeepAlive = true;
+                        uploadReq.Timeout = 1500;
 
                         using (Stream reqStream = uploadReq.GetRequestStream())
                         {
@@ -1729,7 +1744,7 @@ namespace AetherDesk.Agent
                     }
                     catch { }
 
-                    Thread.Sleep(300);
+                    Thread.Sleep(35);
                 }
             });
             cloudRelayThread.IsBackground = true;
@@ -1749,7 +1764,8 @@ namespace AetherDesk.Agent
                     {
                         HttpWebRequest eventReq = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/events/" + cleanId);
                         eventReq.Method = "GET";
-                        eventReq.Timeout = 1500;
+                        eventReq.KeepAlive = true;
+                        eventReq.Timeout = 1200;
 
                         using (HttpWebResponse eventResp = (HttpWebResponse)eventReq.GetResponse())
                         using (StreamReader reader = new StreamReader(eventResp.GetResponseStream()))
@@ -1763,7 +1779,7 @@ namespace AetherDesk.Agent
                     }
                     catch { }
 
-                    Thread.Sleep(60);
+                    Thread.Sleep(15);
                 }
             });
             inputPollThread.IsBackground = true;
@@ -1927,7 +1943,7 @@ namespace AetherDesk.Agent
                 {
                     ImageCodecInfo jpgEncoder = GetEncoder(ImageFormat.Jpeg);
                     EncoderParameters myEncoderParameters = new EncoderParameters(1);
-                    myEncoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 60L);
+                    myEncoderParameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 48L);
                     bitmap.Save(ms, jpgEncoder, myEncoderParameters);
                     return ms.ToArray();
                 }
