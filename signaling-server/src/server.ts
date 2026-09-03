@@ -335,23 +335,30 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 7. File Upload (Send File to Remote PC)
+  // 7. File Upload (Send File to Remote PC with Destination Selection)
   if (pathname.startsWith('/api/file/upload/')) {
     const sessionId = pathname.replace('/api/file/upload/', '').replace(/[\s\-]/g, '');
     const filename = url.searchParams.get('name') || 'Transferred_File.dat';
+    const targetFolder = url.searchParams.get('targetFolder') || 'Desktop';
+    const customPath = url.searchParams.get('customPath') || '';
 
     const chunks: Buffer[] = [];
     req.on('data', (chunk) => chunks.push(chunk));
     req.on('end', () => {
       const fullBuffer = Buffer.concat(chunks);
-      transferredFiles.set(sessionId, { filename, buffer: fullBuffer, timestamp: Date.now() });
+      transferredFiles.set(sessionId, { filename, targetFolder, customPath, buffer: fullBuffer, timestamp: Date.now() });
 
-      // Notify remote agent about incoming file
+      // Notify remote agent about incoming file and destination
       if (!pendingEvents.has(sessionId)) pendingEvents.set(sessionId, []);
-      pendingEvents.get(sessionId)!.push({ x: 0, y: 0, sw: 0, sh: 0, action: 'incoming_file', text: filename });
+      pendingEvents.get(sessionId)!.push({
+        x: 0, y: 0, sw: 0, sh: 0,
+        action: 'incoming_file',
+        text: filename,
+        key: targetFolder
+      });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, filename, size: fullBuffer.length }));
+      res.end(JSON.stringify({ ok: true, filename, targetFolder, size: fullBuffer.length }));
     });
     return;
   }
@@ -365,6 +372,8 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'X-Target-Folder': encodeURIComponent(file.targetFolder || 'Desktop'),
+        'X-Custom-Path': encodeURIComponent(file.customPath || ''),
         'Content-Length': file.buffer.length
       });
       res.end(file.buffer);

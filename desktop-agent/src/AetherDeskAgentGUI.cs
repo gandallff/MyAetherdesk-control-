@@ -1563,31 +1563,48 @@ namespace AetherDesk.Agent
                 {
                     string filePath = ofd.FileName;
                     string fileName = Path.GetFileName(filePath);
-                    ThreadPool.QueueUserWorkItem((state) =>
+                    long fileSize = new FileInfo(filePath).Length;
+
+                    using (FileTransferDialogForm dlg = new FileTransferDialogForm(fileName, fileSize))
                     {
-                        try
+                        if (dlg.ShowDialog(this) == DialogResult.OK)
                         {
-                            byte[] fileBytes = File.ReadAllBytes(filePath);
-                            string uploadUrl = string.Format("{0}/api/file/upload/{1}?name={2}",
-                                CLOUD_RELAY_URL, activeConnectedId, Uri.EscapeDataString(fileName));
+                            string targetFolder = dlg.SelectedTargetFolder;
+                            string customPath = dlg.CustomTargetPath;
 
-                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(uploadUrl);
-                            req.Method = "POST";
-                            req.ContentType = "application/octet-stream";
-                            req.ContentLength = fileBytes.Length;
-                            using (Stream s = req.GetRequestStream())
+                            ThreadPool.QueueUserWorkItem((state) =>
                             {
-                                s.Write(fileBytes, 0, fileBytes.Length);
-                            }
-                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+                                try
+                                {
+                                    byte[] fileBytes = File.ReadAllBytes(filePath);
+                                    string uploadUrl = string.Format("{0}/api/file/upload/{1}?name={2}&targetFolder={3}&customPath={4}",
+                                        CLOUD_RELAY_URL, activeConnectedId, Uri.EscapeDataString(fileName),
+                                        Uri.EscapeDataString(targetFolder), Uri.EscapeDataString(customPath));
 
-                            MessageBox.Show("'" + fileName + "' karşı bilgisayara başarıyla gönderildi!", "Dosya Transferi", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(uploadUrl);
+                                    req.Method = "POST";
+                                    req.ContentType = "application/octet-stream";
+                                    req.ContentLength = fileBytes.Length;
+                                    req.Timeout = 15000;
+                                    using (Stream s = req.GetRequestStream())
+                                    {
+                                        s.Write(fileBytes, 0, fileBytes.Length);
+                                    }
+                                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
+
+                                    string folderDesc = targetFolder == "Desktop" ? "Masaüstü" : (targetFolder == "Downloads" ? "İndirilenler" : (targetFolder == "Documents" ? "Belgeler" : customPath));
+                                    ShowModernDarkNotification(
+                                        "Dosya Gönderildi",
+                                        string.Format("'{0}' dosyası karşı bilgisayarın [{1}] konumuna başarıyla iletildi!", fileName, folderDesc)
+                                    );
+                                }
+                                catch (Exception ex)
+                                {
+                                    MessageBox.Show("Dosya gönderilemedi: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                }
+                            });
                         }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Dosya gönderilemedi: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
-                    });
+                    }
                 }
             }
         }
@@ -1863,6 +1880,59 @@ namespace AetherDesk.Agent
                         {
                             SendKeySafe(key);
                         }
+                    }
+                    else if (action == "incoming_file")
+                    {
+                        string fileName = GetRegexVal(obj, "text") ?? "Transferred_File.dat";
+                        string targetFolder = GetRegexVal(obj, "key") ?? "Desktop";
+
+                        ThreadPool.QueueUserWorkItem((st) => {
+                            try
+                            {
+                                string cleanId = this.mySessionId.Replace(" ", "");
+                                HttpWebRequest dreq = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/file/download/" + cleanId);
+                                dreq.Method = "GET";
+                                dreq.Timeout = 15000;
+
+                                using (HttpWebResponse dresp = (HttpWebResponse)dreq.GetResponse())
+                                using (Stream ds = dresp.GetResponseStream())
+                                using (MemoryStream dms = new MemoryStream())
+                                {
+                                    ds.CopyTo(dms);
+                                    byte[] data = dms.ToArray();
+
+                                    string destDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                                    if (targetFolder == "Downloads")
+                                        destDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                                    else if (targetFolder == "Documents")
+                                        destDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                                    else if (targetFolder == "Custom")
+                                    {
+                                        string customPath = dresp.Headers["X-Custom-Path"];
+                                        if (!string.IsNullOrEmpty(customPath))
+                                        {
+                                            customPath = Uri.UnescapeDataString(customPath);
+                                            if (Directory.Exists(customPath)) destDir = customPath;
+                                        }
+                                    }
+
+                                    if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+                                    string savePath = Path.Combine(destDir, fileName);
+                                    File.WriteAllBytes(savePath, data);
+
+                                    if (this.IsHandleCreated)
+                                    {
+                                        this.Invoke(new Action(() => {
+                                            ShowModernDarkNotification(
+                                                "Dosya Alındı",
+                                                string.Format("'{0}' dosyası karşı taraftan alındı ve kaydedildi!\n\nKonum: {1}", fileName, savePath)
+                                            );
+                                        }));
+                                    }
+                                }
+                            }
+                            catch { }
+                        });
                     }
                 }
             }
@@ -2159,6 +2229,156 @@ namespace AetherDesk.Agent
             path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
+        }
+    }
+
+    // ===================================================================================
+    // FILE TRANSFER DESTINATION SELECTOR DIALOG
+    // ===================================================================================
+    public class FileTransferDialogForm : Form
+    {
+        public string SelectedTargetFolder = "Desktop";
+        public string CustomTargetPath = "";
+
+        private RadioButton rbDesktop;
+        private RadioButton rbDownloads;
+        private RadioButton rbDocuments;
+        private RadioButton rbCustom;
+        private TextBox txtCustomPath;
+
+        public FileTransferDialogForm(string fileName, long fileSize)
+        {
+            this.Text = "AetherDesk - Karşı Bilgisayar Hedef Konum Seçimi";
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.Size = new Size(460, 380);
+            this.BackColor = Color.FromArgb(15, 23, 42);
+            this.ForeColor = Color.White;
+
+            Label lblTitle = new Label();
+            lblTitle.Text = "📁 Dosya Transferi - Hedef Konum";
+            lblTitle.Font = new Font("Segoe UI", 11.5f, FontStyle.Bold);
+            lblTitle.ForeColor = Color.White;
+            lblTitle.Location = new Point(20, 18);
+            lblTitle.AutoSize = true;
+            this.Controls.Add(lblTitle);
+
+            // File Info Card
+            Panel pnlFileInfo = new Panel();
+            pnlFileInfo.Location = new Point(20, 48);
+            pnlFileInfo.Size = new Size(404, 52);
+            pnlFileInfo.BackColor = Color.FromArgb(30, 41, 59);
+            this.Controls.Add(pnlFileInfo);
+
+            Label lblFileName = new Label();
+            string sizeStr = fileSize < 1024 ? fileSize + " B" : (fileSize < 1048576 ? (fileSize / 1024) + " KB" : (fileSize / 1048576.0).ToString("F1") + " MB");
+            lblFileName.Text = string.Format("📄 {0} ({1})", fileName, sizeStr);
+            lblFileName.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblFileName.ForeColor = Color.FromArgb(56, 189, 248);
+            lblFileName.Location = new Point(12, 14);
+            lblFileName.Size = new Size(380, 24);
+            pnlFileInfo.Controls.Add(lblFileName);
+
+            Label lblPrompt = new Label();
+            lblPrompt.Text = "Bu dosya karşı bilgisayarda nereye kaydedilsin?";
+            lblPrompt.Font = new Font("Segoe UI", 9f);
+            lblPrompt.ForeColor = Color.FromArgb(203, 213, 225);
+            lblPrompt.Location = new Point(20, 112);
+            lblPrompt.AutoSize = true;
+            this.Controls.Add(lblPrompt);
+
+            // Radio Options
+            rbDesktop = new RadioButton();
+            rbDesktop.Text = "🖥️  Masaüstü (Desktop)  [Varsayılan & Kolay Erişim]";
+            rbDesktop.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            rbDesktop.ForeColor = Color.FromArgb(241, 245, 249);
+            rbDesktop.Location = new Point(24, 138);
+            rbDesktop.Size = new Size(390, 26);
+            rbDesktop.Checked = true;
+            this.Controls.Add(rbDesktop);
+
+            rbDownloads = new RadioButton();
+            rbDownloads.Text = "📥  İndirilenler Klasörü (Downloads)";
+            rbDownloads.Font = new Font("Segoe UI", 9.5f);
+            rbDownloads.ForeColor = Color.FromArgb(226, 232, 240);
+            rbDownloads.Location = new Point(24, 168);
+            rbDownloads.Size = new Size(390, 26);
+            this.Controls.Add(rbDownloads);
+
+            rbDocuments = new RadioButton();
+            rbDocuments.Text = "📁  Belgelerim (Documents)";
+            rbDocuments.Font = new Font("Segoe UI", 9.5f);
+            rbDocuments.ForeColor = Color.FromArgb(226, 232, 240);
+            rbDocuments.Location = new Point(24, 198);
+            rbDocuments.Size = new Size(390, 26);
+            this.Controls.Add(rbDocuments);
+
+            rbCustom = new RadioButton();
+            rbCustom.Text = "💾  Özel Dizin / Klasör Yolu:";
+            rbCustom.Font = new Font("Segoe UI", 9.5f);
+            rbCustom.ForeColor = Color.FromArgb(226, 232, 240);
+            rbCustom.Location = new Point(24, 228);
+            rbCustom.Size = new Size(390, 26);
+            this.Controls.Add(rbCustom);
+
+            txtCustomPath = new TextBox();
+            txtCustomPath.Font = new Font("Consolas", 9.5f);
+            txtCustomPath.BackColor = Color.FromArgb(30, 41, 59);
+            txtCustomPath.ForeColor = Color.White;
+            txtCustomPath.BorderStyle = BorderStyle.FixedSingle;
+            txtCustomPath.Location = new Point(48, 258);
+            txtCustomPath.Size = new Size(376, 24);
+            txtCustomPath.Text = "C:\\";
+            txtCustomPath.Enabled = false;
+            this.Controls.Add(txtCustomPath);
+
+            rbCustom.CheckedChanged += (s, e) => {
+                txtCustomPath.Enabled = rbCustom.Checked;
+                if (rbCustom.Checked) txtCustomPath.Focus();
+            };
+
+            // Buttons
+            Button btnSend = new Button();
+            btnSend.Text = "🚀 Dosyayı Gönder";
+            btnSend.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnSend.ForeColor = Color.White;
+            btnSend.BackColor = Color.FromArgb(37, 99, 235);
+            btnSend.FlatStyle = FlatStyle.Flat;
+            btnSend.FlatAppearance.BorderSize = 0;
+            btnSend.Size = new Size(160, 36);
+            btnSend.Location = new Point(264, 298);
+            btnSend.Cursor = Cursors.Hand;
+            btnSend.Click += (s, e) => {
+                if (rbDesktop.Checked) SelectedTargetFolder = "Desktop";
+                else if (rbDownloads.Checked) SelectedTargetFolder = "Downloads";
+                else if (rbDocuments.Checked) SelectedTargetFolder = "Documents";
+                else if (rbCustom.Checked)
+                {
+                    SelectedTargetFolder = "Custom";
+                    CustomTargetPath = txtCustomPath.Text.Trim();
+                }
+                this.DialogResult = DialogResult.OK;
+                this.Close();
+            };
+            this.Controls.Add(btnSend);
+
+            Button btnCancel = new Button();
+            btnCancel.Text = "İptal";
+            btnCancel.Font = new Font("Segoe UI", 9f);
+            btnCancel.ForeColor = Color.FromArgb(148, 163, 184);
+            btnCancel.BackColor = Color.FromArgb(30, 41, 59);
+            btnCancel.FlatStyle = FlatStyle.Flat;
+            btnCancel.FlatAppearance.BorderSize = 0;
+            btnCancel.Size = new Size(90, 36);
+            btnCancel.Location = new Point(164, 298);
+            btnCancel.Cursor = Cursors.Hand;
+            btnCancel.Click += (s, e) => {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+            this.Controls.Add(btnCancel);
         }
     }
 }
