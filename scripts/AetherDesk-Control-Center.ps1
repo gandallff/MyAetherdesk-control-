@@ -1,7 +1,7 @@
-# AetherDesk Master Control Center GUI Form
+﻿# AetherDesk Master Control Center GUI Form
 # - Tum butonlar non-blocking (Start-Process / Runspace)
 # - Form kapaninca: tum Node/npm surecleri otomatik temizlenir
-# - "SERVISLERI DURDUR" butonu ile anlık temizlik
+# - "SERVISLERI DURDUR" butonu ile anl--k temizlik
 
 [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
 [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")       | Out-Null
@@ -9,7 +9,7 @@
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $rootDir   = Split-Path -Path $scriptDir -Parent
 
-# ── Surac temizleme fonksiyonu (portlar + node/npm) ───────────────────────────
+# ------ Surac temizleme fonksiyonu (portlar + node/npm) ---------------------------------------------------------------------------------
 function Stop-AetherDeskServices {
     $ports = @(8080, 5000, 9000, 9001, 9090, 9091)
     foreach ($port in $ports) {
@@ -31,7 +31,7 @@ function Stop-AetherDeskServices {
         Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
-# ── Form ──────────────────────────────────────────────────────────────────────
+# ------ Form ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $form = New-Object System.Windows.Forms.Form
 $form.Text            = "AetherDesk Control Center 2026"
 $form.Size            = New-Object System.Drawing.Size(560, 710)
@@ -52,7 +52,7 @@ $form.Add_FormClosing({
     Stop-AetherDeskServices
 })
 
-# ── Title ─────────────────────────────────────────────────────────────────────
+# ------ Title ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $lblTitle           = New-Object System.Windows.Forms.Label
 $lblTitle.Text      = "AetherDesk Master Control Center"
 $lblTitle.Font      = New-Object System.Drawing.Font("Segoe UI", 15, [System.Drawing.FontStyle]::Bold)
@@ -69,7 +69,7 @@ $lblSub.Location  = New-Object System.Drawing.Point(30, 50)
 $lblSub.Size      = New-Object System.Drawing.Size(480, 20)
 $form.Controls.Add($lblSub)
 
-# ── Buton Satiri 1 ────────────────────────────────────────────────────────────
+# ------ Buton Satiri 1 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $btn1           = New-Object System.Windows.Forms.Button
 $btn1.Text      = "[1] TUM SERVISLERI BASLAT"
 $btn1.Font      = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
@@ -94,7 +94,7 @@ $btn2.Location  = New-Object System.Drawing.Point(275, 80)
 $btn2.Size      = New-Object System.Drawing.Size(235, 42)
 $form.Controls.Add($btn2)
 
-# ── Buton Satiri 2 ────────────────────────────────────────────────────────────
+# ------ Buton Satiri 2 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $btn3           = New-Object System.Windows.Forms.Button
 $btn3.Text      = "[3] MUSTERI DESTEK ARACI"
 $btn3.Font      = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
@@ -121,7 +121,7 @@ $btn4.Add_Click({
 })
 $form.Controls.Add($btn4)
 
-# ── YENI: Derleme ve Durdur Butonları ───────────────────────────────────────────
+# ------ YENI: Derleme ve Durdur Butonlar-- ---------------------------------------------------------------------------------------------------------------------------------
 $btnCompile           = New-Object System.Windows.Forms.Button
 $btnCompile.Text      = "[6] AGENT EXE DERLE (CARGO BUILD)"
 $btnCompile.Font      = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
@@ -197,7 +197,7 @@ $btnCompile.Add_Click({
 
         if ($proc.ExitCode -eq 0) {
             QProg 80
-            QLog "✓ Rust Agent basariyla derlendi."
+            QLog "--- Rust Agent basariyla derlendi."
             
             # 1. Copy to SaaS Portal Frontend Static Assets (so Vercel can host it)
             $publicDir = "$rootDir\saas-portal\frontend\public"
@@ -215,7 +215,7 @@ $btnCompile.Add_Click({
                 Copy-Item "$rootDir\desktop-agent\target\release\aetherdesk-agent.exe" -Destination "$distDir\" -Force
             }
             QProg 100
-            QLog "✓ Islem tamamlandi!"
+            QLog "--- Islem tamamlandi!"
         } else {
             QProg 0
             QLog "[HATA] Derleme sirasinda bir sorun olustu!"
@@ -244,7 +244,7 @@ $btnStop.Add_Click({
 $form.Controls.Add($btnStop)
 
 
-# ── YENI: Vercel Login Butonu ──────────────────────────────────────────────────
+# ------ YENI: Vercel Login Butonu ------------------------------------------------------------------------------------------------------------------------------------------------------
 $btnVercelLogin           = New-Object System.Windows.Forms.Button
 $btnVercelLogin.Text      = "[7] VERCEL HESABINA GIRIS YAP (LOGIN)"
 $btnVercelLogin.Font      = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
@@ -267,14 +267,14 @@ $btnVercelLogin.Add_Click({
 })
 $form.Controls.Add($btnVercelLogin)
 
-# ── Progress Bar ──────────────────────────────────────────────────────────────
+# ------ Progress Bar ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $pBar          = New-Object System.Windows.Forms.ProgressBar
 $pBar.Location = New-Object System.Drawing.Point(30, 272)
 $pBar.Size     = New-Object System.Drawing.Size(480, 16)
 $pBar.Value    = 0
 $form.Controls.Add($pBar)
 
-# ── Live Log Box ──────────────────────────────────────────────────────────────
+# ------ Live Log Box ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $txtLog            = New-Object System.Windows.Forms.TextBox
 $txtLog.Multiline  = $true
 $txtLog.ScrollBars = "Vertical"
@@ -287,7 +287,7 @@ $txtLog.Size       = New-Object System.Drawing.Size(480, 260)
 $txtLog.Text       = "[INFO] AetherDesk Control Center Hazir.`r`nCanli GitHub  : https://github.com/gandallff/MyAetherdesk-control-`r`nCanli Vercel  : https://my-aetherdesk-control.vercel.app`r`n"
 $form.Controls.Add($txtLog)
 
-# ── GitHub Butonu ─────────────────────────────────────────────────────────────
+# ------ GitHub Butonu ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $btnOpenGit           = New-Object System.Windows.Forms.Button
 $btnOpenGit.Text      = "GITHUB REPOSUNU TARAYICIDA AC"
 $btnOpenGit.Font      = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
@@ -302,7 +302,54 @@ $btnOpenGit.Add_Click({
 $form.Controls.Add($btnOpenGit)
 
 
-# ── Yardimci Fonksiyonlar ─────────────────────────────────────────────────────
+# ------ G--m--l-- Bildirim Kart-- (Embedded In-Window Notification Card) ---------------------------------------------
+$pnlNotification = New-Object System.Windows.Forms.Panel
+$pnlNotification.Location = New-Object System.Drawing.Point(30, 415)
+$pnlNotification.Size = New-Object System.Drawing.Size(480, 140)
+$pnlNotification.BackColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
+$pnlNotification.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$pnlNotification.Visible = $false
+$form.Controls.Add($pnlNotification)
+$pnlNotification.BringToFront()
+
+$lblNotifTitle = New-Object System.Windows.Forms.Label
+$lblNotifTitle.Text = "[OK] YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!"
+$lblNotifTitle.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+$lblNotifTitle.ForeColor = [System.Drawing.Color]::FromArgb(52, 211, 153)
+$lblNotifTitle.Location = New-Object System.Drawing.Point(15, 12)
+$lblNotifTitle.Size = New-Object System.Drawing.Size(450, 22)
+$pnlNotification.Controls.Add($lblNotifTitle)
+
+$lblNotifBody = New-Object System.Windows.Forms.Label
+$lblNotifBody.Text = "GitHub : https://github.com/gandallff/MyAetherdesk-control-`r`nVercel : https://my-aetherdesk-control.vercel.app"
+$lblNotifBody.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$lblNotifBody.ForeColor = [System.Drawing.Color]::FromArgb(203, 213, 225)
+$lblNotifBody.Location = New-Object System.Drawing.Point(15, 38)
+$lblNotifBody.Size = New-Object System.Drawing.Size(450, 46)
+$pnlNotification.Controls.Add($lblNotifBody)
+
+$btnNotifClose = New-Object System.Windows.Forms.Button
+$btnNotifClose.Text = "TAMAM"
+$btnNotifClose.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$btnNotifClose.ForeColor = [System.Drawing.Color]::White
+$btnNotifClose.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
+$btnNotifClose.FlatStyle = "Flat"
+$btnNotifClose.Location = New-Object System.Drawing.Point(360, 92)
+$btnNotifClose.Size = New-Object System.Drawing.Size(105, 32)
+$btnNotifClose.Cursor = [System.Windows.Forms.Cursors]::Hand
+$btnNotifClose.Add_Click({
+    $pnlNotification.Visible = $false
+})
+$pnlNotification.Controls.Add($btnNotifClose)
+
+function Show-EmbeddedNotification($title, $msg) {
+    $lblNotifTitle.Text = $title
+    $lblNotifBody.Text = $msg
+    $pnlNotification.Visible = $true
+    $pnlNotification.BringToFront()
+}
+
+# ------ Yardimci Fonksiyonlar ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 function Write-Log($msg) {
     if ($txtLog.IsDisposed) { return }
     $txtLog.AppendText("`r`n[" + (Get-Date -Format "HH:mm:ss") + "] " + $msg)
@@ -315,14 +362,14 @@ function Set-Progress($val) {
     $pBar.Value = [Math]::Min(100, [Math]::Max(0, $val))
 }
 
-# ── Thread-safe kuyruklar (Runspace -> UI Timer) ──────────────────────────────
+# ------ Thread-safe kuyruklar (Runspace -> UI Timer) ------------------------------------------------------------------------------------------
 $script:msgQueue  = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
 $script:progQueue = [System.Collections.Concurrent.ConcurrentQueue[int]]::new()
 $script:runspace  = $null
 $script:rsHandle  = $null
 $script:activeTask = $null
 
-# ── Poll Timer ────────────────────────────────────────────────────────────────
+# ------ Poll Timer ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 $pollTimer          = New-Object System.Windows.Forms.Timer
 $pollTimer.Interval = 400
 
@@ -350,26 +397,16 @@ $pollTimer.Add_Tick({
 
         if ($script:activeTask -eq "DEPLOY") {
             Write-Log "=== DEPLOY TAMAMLANDI ==="
-            [System.Windows.Forms.MessageBox]::Show(
-                "YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!`r`n`r`nGitHub : https://github.com/gandallff/MyAetherdesk-control-`r`nVercel : https://my-aetherdesk-control.vercel.app",
-                "AetherDesk Deploy Tamamlandi",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            )
+            Show-EmbeddedNotification "[OK] YUKLEME VE YAYINLAMA BASARIYLA TAMAMLANDI!" "GitHub : https://github.com/gandallff/MyAetherdesk-control-`r`nVercel : https://my-aetherdesk-control.vercel.app"
         } elseif ($script:activeTask -eq "COMPILE") {
             Write-Log "=== AGENT DERLEME TAMAMLANDI ==="
-            [System.Windows.Forms.MessageBox]::Show(
-                "AetherDesk Rust Agent (.exe) derleme ve Vercel/SaaS dagitim hazirlik islemleri basariyla tamamlandi!`r`n`r`nBinary dosya konumu: \saas-portal\frontend\public\aetherdesk-agent.exe",
-                "AetherDesk Derleme Tamamlandi",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            )
+            Show-EmbeddedNotification "[OK] AGENT DERLEME BASARIYLA TAMAMLANDI!" "AetherDesk Agent (.exe) derleme ve Vercel/SaaS dagitim hazirlik islemleri tamamlandi!`r`nKonum: \saas-portal\frontend\public\aetherdesk-agent.exe"
         }
         $script:activeTask = $null
     }
 })
 
-# ── Deploy Butonu (Runspace - tamamen non-blocking) ───────────────────────────
+# ------ Deploy Butonu (Runspace - tamamen non-blocking) ---------------------------------------------------------------------------------
 $btn2.Add_Click({
     if ($script:runspace -ne $null) { return }
 
@@ -445,7 +482,7 @@ $btn2.Add_Click({
     $pollTimer.Start()
 })
 
-# ── Formu Goster ──────────────────────────────────────────────────────────────
+# ------ Formu Goster ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 [void]$form.ShowDialog()
 
 # Son temizlik (ShowDialog donunca)
