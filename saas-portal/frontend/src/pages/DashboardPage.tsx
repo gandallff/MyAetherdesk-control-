@@ -75,7 +75,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
     }
   }, []);
 
+  const getDeviceLimit = (): number => {
+    const plan = user.plan || 'FREE';
+    if (plan === 'PRO') return 15;
+    if (plan === 'ENTERPRISE') return 9999;
+    return 3;
+  };
+
   const openAddModal = () => {
+    const maxLimit = getDeviceLimit();
+    if (devices.length >= maxLimit) {
+      alert(`⚠️ Paket Limitine Ulaşıldı!\n\nMevcut (${user.plan || 'FREE'}) paketinizde en fazla ${maxLimit} kayıtlı bilgisayar ekleyebilirsiniz.\n\nDaha fazla cihaz eklemek için lütfen paketinizi yükseltin.`);
+      setIsPricingOpen(true);
+      return;
+    }
     setEditingDeviceId(null);
     setDeviceName('');
     setSessionId('');
@@ -259,7 +272,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onLogout, on
           {/* Section: Address Book Title Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-100">Kayıtlı Cihazlar & Adres Defteri</h2>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-xl font-bold text-slate-100">Kayıtlı Cihazlar & Adres Defteri</h2>
+                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-cyan-400 border border-slate-700">
+                  {devices.length} / {getDeviceLimit() === 9999 ? 'Sınırsız' : `${getDeviceLimit()} Cihaz`}
+                </span>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5">Sık bağlandığınız bilgisayarlar ve 1-Click uzaktan kontrol listesi</p>
             </div>
 

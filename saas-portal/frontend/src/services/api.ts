@@ -237,28 +237,28 @@ export class ApiService {
       plans: [
         {
           id: 'FREE',
-          name: 'QuickSupport Free',
-          price: '$0',
-          period: 'Lifetime',
-          maxDevices: 1,
-          features: ['1 Eşzamanlı Oturum', '60 FPS DXGI GPU Akışı', 'Temel Dosya Transferi', 'Topluluk Desteği']
+          name: 'Standart Free',
+          price: '₺0',
+          period: 'Ömür Boyu',
+          maxDevices: 3,
+          features: ['Maksimum 3 Cihaz Kontrolü', 'Standart Hız & Ekran İzleme', 'Topluluk Desteği']
         },
         {
           id: 'PRO',
-          name: 'Pro Solo Specialist',
-          price: '$15',
-          period: '/ ay',
+          name: 'Pro Uzman',
+          price: '₺199',
+          period: '/ ay (veya ₺1.990 / yıl)',
           popular: true,
-          maxDevices: 5,
-          features: ['5 Eşzamanlı Cihaz', 'NVENC H.264 Donanım Hızlandırma', 'Katılımsız Erişim (Unattended)', 'Çoklu Monitör Desteği', 'Öncelikli Destek']
+          maxDevices: 15,
+          features: ['15 Kayıtlı Bilgisayara Kadar', '60 FPS NVENC GPU Hızlandırma', 'Katılımsız Erişim (Unattended)', 'Çoklu Monitör & Dosya Transferi', 'Öncelikli Destek']
         },
         {
           id: 'ENTERPRISE',
-          name: 'Enterprise Grid Master',
-          price: '$49',
-          period: '/ ay',
-          maxDevices: 50,
-          features: ['Sınırsız Cihaz & Adres Defteri', 'Çoklu Grid İzleme Modu', 'Security Guard Tehdit Raporlama', 'Özel Domain & Şirket Logosu', '7/24 SLA Garantisi']
+          name: 'Enterprise Kurumsal',
+          price: '₺599',
+          period: '/ ay (veya ₺5.990 / yıl)',
+          maxDevices: 9999,
+          features: ['Sınırsız Cihaz & Adres Defteri', 'Security Guard Tehdit Raporlama', 'Özel Şirket Logosu & Markalama', '7/24 Kesintisiz SLA Desteği']
         }
       ]
     };

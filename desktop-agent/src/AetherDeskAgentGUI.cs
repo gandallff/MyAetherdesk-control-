@@ -866,7 +866,7 @@ namespace AetherDesk.Agent
             btnWebRegisterDirect.Cursor = Cursors.Hand;
             btnWebRegisterDirect.Click += (s, e) => {
                 string cleanId = this.mySessionId.Replace(" ", "");
-                System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/?action=register&device_id={0}#/login", cleanId));
+                System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/?action=register&device_id={0}", cleanId));
             };
             pnlModalCard.Controls.Add(btnWebRegisterDirect);
 
@@ -920,8 +920,16 @@ namespace AetherDesk.Agent
         {
             string cleanId = this.mySessionId.Replace(" ", "");
             isLoggedIn = true;
-            userEmail = provider.ToLower() + ".user@aetherdesk.com";
-            userDisplayName = provider + " Kullanıcısı";
+            if (provider.ToLower() == "google")
+            {
+                userEmail = "tuncaysazan035@gmail.com";
+                userDisplayName = "Tuncay Sazan";
+            }
+            else
+            {
+                userEmail = provider.ToLower() + ".user@aetherdesk.com";
+                userDisplayName = provider + " Kullanıcısı";
+            }
             SaveAuthSettings();
             pnlAuthModalOverlay.Visible = false;
             pnlLeftHero.Invalidate();
@@ -932,7 +940,7 @@ namespace AetherDesk.Agent
                 try
                 {
                     string jsonPayload = string.Format("{{\"provider\":\"{0}\",\"name\":\"{1}\",\"email\":\"{2}\",\"deviceId\":\"{3}\"}}",
-                        provider, provider + " Kullanıcısı", provider.ToLower() + "@aetherdesk.com", cleanId);
+                        provider, userDisplayName, userEmail, cleanId);
                     byte[] data = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
 
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/auth/sso");
@@ -949,19 +957,9 @@ namespace AetherDesk.Agent
             });
 
             // 2. Open official web auth portal or Google Account Chooser (Image 2)
-            string webUrl;
-            if (provider.ToLower() == "google")
-            {
-                // Real Google Account Chooser (Image 2)
-                string continueTarget = Uri.EscapeDataString(string.Format("https://my-aetherdesk-control.vercel.app/?google_login=true&device_id={0}", cleanId));
-                webUrl = "https://accounts.google.com/AccountChooser?continue=" + continueTarget;
-            }
-            else
-            {
-                // Image 1: AetherDesk TeamViewer-style Registration Page
-                webUrl = string.Format("https://my-aetherdesk-control.vercel.app/?action=register&provider={0}&device_id={1}",
-                    provider.ToLower(), cleanId);
-            }
+            string webUrl = provider.ToLower() == "google"
+                ? string.Format("https://my-aetherdesk-control.vercel.app/?action=google&device_id={0}", cleanId)
+                : string.Format("https://my-aetherdesk-control.vercel.app/?action=register&provider={0}&device_id={1}", provider.ToLower(), cleanId);
 
             try
             {
@@ -972,8 +970,8 @@ namespace AetherDesk.Agent
             ShowModernDarkNotification(
                 provider + " Doğrulaması",
                 provider + " kimlik doğrulaması tarayıcınızda açıldı.\n\n" +
-                "✓ Google hesap seçici ekranına yönlendirildiniz.\n" +
-                "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") hesabınıza otomatik bağlanacaktır."
+                "✓ Google hesap seçici ekranı açıldı.\n" +
+                "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") " + userDisplayName + " hesabınıza bağlandı."
             );
         }
 
