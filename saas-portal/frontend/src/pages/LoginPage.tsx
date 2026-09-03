@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService, User } from '../services/api';
-import { Zap, Laptop, CheckCircle2, User as UserIcon, Lock, Mail, ShieldCheck, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Zap, Laptop, CheckCircle2, User as UserIcon, Lock, Mail, ShieldCheck, ArrowRight, ArrowLeft, Eye, EyeOff, Home } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess: (user: User) => void;
+  onBackToHome?: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onBackToHome }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [showQuickGoogle, setShowQuickGoogle] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -160,18 +161,39 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleGoHome = () => {
+    if (onBackToHome) {
+      onBackToHome();
+    } else {
+      window.location.href = '/';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#0b101b] text-slate-100 flex flex-col justify-between items-center py-8 px-4 font-sans antialiased relative">
+    <div className="min-h-screen bg-[#0b101b] text-slate-100 flex flex-col justify-between items-center py-6 px-4 font-sans antialiased relative">
       <div className="absolute inset-0 bg-gradient-to-tr from-blue-900/10 via-transparent to-cyan-900/10 pointer-events-none" />
 
-      <div className="flex items-center space-x-3 mb-4 z-10">
-        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-          <Zap className="w-6 h-6 fill-white" />
+      {/* Top Header Bar with Brand & Back to Home Button */}
+      <div className="w-full max-w-[440px] flex items-center justify-between mb-4 z-10">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+            <Zap className="w-5 h-5 fill-white" />
+          </div>
+          <div>
+            <span className="text-xl font-black text-white tracking-tight">AetherDesk</span>
+            <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-400 block -mt-1">Cloud Control Portal</span>
+          </div>
         </div>
-        <div>
-          <span className="text-2xl font-black text-white tracking-tight">AetherDesk</span>
-          <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 block -mt-1">Cloud Control Portal</span>
-        </div>
+
+        <button
+          type="button"
+          onClick={handleGoHome}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#161d2d] hover:bg-[#202c44] text-slate-300 hover:text-white text-xs font-semibold transition-all border border-slate-700/80 shadow-sm cursor-pointer"
+          title="Tanıtım Ana Sayfasına Geri Dön"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Ana Sayfaya Dön</span>
+        </button>
       </div>
 
       {showQuickGoogle ? (

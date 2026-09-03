@@ -71,6 +71,10 @@ export const AppContent: React.FC = () => {
           setCurrentUser(user);
           setShowAuthModal(false);
         }}
+        onBackToHome={() => {
+          setShowAuthModal(false);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }}
       />
     );
   }

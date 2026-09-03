@@ -102,10 +102,7 @@ namespace AetherDesk.Agent
         private CheckBox chkStartWithWindows;
         private CheckBox chkEasyAccess;
 
-        // In-App Modern Modal for Auth (SSO & Registration)
-        private Panel pnlAuthModalOverlay;
-        private TextBox txtRegFullName;
-        private TextBox txtRegEmail;
+
 
         // In-App Active Session View
         private Panel pnlActiveSession;
@@ -173,7 +170,6 @@ namespace AetherDesk.Agent
 
             BuildCustomTitleBar();
             BuildSplitScreenLayout();
-            BuildAuthModalOverlay();
             BuildActiveSessionPage();
 
             StartListener();
@@ -254,7 +250,7 @@ namespace AetherDesk.Agent
             pnlCustomTitleBar.Controls.Add(picTitleLogo);
 
             lblAppBrandTitle = new Label();
-            lblAppBrandTitle.Text = "AetherDesk Remote Access";
+            lblAppBrandTitle.Text = "AetherDesk Remote Access  v0.1.0";
             lblAppBrandTitle.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             lblAppBrandTitle.ForeColor = clrTextLight;
             lblAppBrandTitle.Location = new Point(50, 11);
@@ -444,7 +440,7 @@ namespace AetherDesk.Agent
             using (Font fontStatus = new Font("Segoe UI", 8.5f))
             using (SolidBrush brushStatus = new SolidBrush(Color.FromArgb(186, 210, 240)))
             {
-                g.DrawString("Bağlantı için hazır (güvenli bağlantı)", fontStatus, brushStatus, 52, statusY + 1);
+                g.DrawString("Bağlantı için hazır (güvenli bağlantı) • v0.1.0", fontStatus, brushStatus, 52, statusY + 1);
             }
         }
 
@@ -464,9 +460,22 @@ namespace AetherDesk.Agent
 
         private void PnlLeftHero_MouseDown(object sender, MouseEventArgs e)
         {
-            if (rectHeroLoginBtn.Contains(e.Location) || rectHeroRegisterLink.Contains(e.Location))
+            string cleanId = this.mySessionId.Replace(" ", "");
+            if (rectHeroRegisterLink.Contains(e.Location))
             {
-                ShowAuthModal();
+                try
+                {
+                    System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/?action=register&device_id={0}", cleanId));
+                }
+                catch { }
+            }
+            else if (rectHeroLoginBtn.Contains(e.Location))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/?action=login&device_id={0}", cleanId));
+                }
+                catch { }
             }
         }
 
@@ -707,273 +716,8 @@ namespace AetherDesk.Agent
         }
 
         // -----------------------------------------------------------------------------------
-        // IN-APP AUTH MODAL (MATCHING IMAGE 2 WITH HARMONIOUS DARK STYLING)
+        // DIRECT WEB PORTAL INTEGRATION (NO IN-APP POPUP OVERLAY)
         // -----------------------------------------------------------------------------------
-        private void BuildAuthModalOverlay()
-        {
-            pnlAuthModalOverlay = new Panel();
-            pnlAuthModalOverlay.Dock = DockStyle.Fill;
-            pnlAuthModalOverlay.BackColor = Color.FromArgb(230, 13, 17, 23);
-            pnlAuthModalOverlay.Visible = false;
-            this.Controls.Add(pnlAuthModalOverlay);
-
-            Panel pnlModalCard = new Panel();
-            pnlModalCard.Size = new Size(460, 530);
-            pnlModalCard.BackColor = clrCardBg;
-            pnlModalCard.Anchor = AnchorStyles.None;
-            pnlModalCard.Location = new Point((pnlAuthModalOverlay.Width - pnlModalCard.Width) / 2, (pnlAuthModalOverlay.Height - pnlModalCard.Height) / 2);
-            pnlModalCard.Paint += (s, e) => {
-                using (Pen p = new Pen(clrBorder, 1.5f))
-                {
-                    e.Graphics.DrawRectangle(p, 0, 0, pnlModalCard.Width - 1, pnlModalCard.Height - 1);
-                }
-            };
-            pnlAuthModalOverlay.Controls.Add(pnlModalCard);
-
-            pnlAuthModalOverlay.Resize += (s, e) => {
-                pnlModalCard.Location = new Point((pnlAuthModalOverlay.Width - pnlModalCard.Width) / 2, (pnlAuthModalOverlay.Height - pnlModalCard.Height) / 2);
-            };
-
-            Button btnCloseModal = new Button();
-            btnCloseModal.Text = "✕";
-            btnCloseModal.Font = new Font("Segoe UI", 11, FontStyle.Bold);
-            btnCloseModal.ForeColor = clrTextMuted;
-            btnCloseModal.BackColor = Color.Transparent;
-            btnCloseModal.FlatStyle = FlatStyle.Flat;
-            btnCloseModal.FlatAppearance.BorderSize = 0;
-            btnCloseModal.Size = new Size(36, 36);
-            btnCloseModal.Location = new Point(415, 10);
-            btnCloseModal.Cursor = Cursors.Hand;
-            btnCloseModal.Click += (s, e) => pnlAuthModalOverlay.Visible = false;
-            pnlModalCard.Controls.Add(btnCloseModal);
-
-            Label lblModalTitle = new Label();
-            lblModalTitle.Text = "Bir hesap oluşturun";
-            lblModalTitle.Font = new Font("Segoe UI", 16, FontStyle.Bold);
-            lblModalTitle.ForeColor = clrTextLight;
-            lblModalTitle.Location = new Point(34, 26);
-            lblModalTitle.AutoSize = true;
-            pnlModalCard.Controls.Add(lblModalTitle);
-
-            Label lblModalSub = new Label();
-            lblModalSub.Text = "Hoş geldiniz! Lütfen bilgilerinizi girin.";
-            lblModalSub.Font = new Font("Segoe UI", 9f);
-            lblModalSub.ForeColor = clrTextMuted;
-            lblModalSub.Location = new Point(36, 56);
-            lblModalSub.AutoSize = true;
-            pnlModalCard.Controls.Add(lblModalSub);
-
-            Label lblNameTag = new Label { Text = "Adı ve soyadı", Location = new Point(36, 90), AutoSize = true, Font = new Font("Segoe UI", 8.5f), ForeColor = clrTextMuted };
-            txtRegFullName = new TextBox { Location = new Point(36, 112), Size = new Size(388, 26), BackColor = clrInnerBox, ForeColor = clrTextLight, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10) };
-
-            Label lblEmailTag = new Label { Text = "E-posta", Location = new Point(36, 146), AutoSize = true, Font = new Font("Segoe UI", 8.5f), ForeColor = clrTextMuted };
-            txtRegEmail = new TextBox { Location = new Point(36, 168), Size = new Size(388, 26), BackColor = clrInnerBox, ForeColor = clrTextLight, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10), Text = userEmail };
-
-            Button btnSubmitDevam = new Button {
-                Text = "Devam",
-                Location = new Point(36, 212),
-                Size = new Size(388, 42),
-                BackColor = clrAccentBlue,
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
-                Cursor = Cursors.Hand
-            };
-            btnSubmitDevam.Click += (s, e) => {
-                string inputEmail = txtRegEmail.Text.Trim();
-                string inputName = string.IsNullOrEmpty(txtRegFullName.Text) ? inputEmail.Split('@')[0] : txtRegFullName.Text.Trim();
-                if (inputEmail.Contains("@"))
-                {
-                    isLoggedIn = true;
-                    userEmail = inputEmail;
-                    userDisplayName = inputName;
-                    SaveAuthSettings();
-                    pnlAuthModalOverlay.Visible = false;
-                    pnlLeftHero.Invalidate();
-
-                    // Real Cloud Registration & Device Binding
-                    ThreadPool.QueueUserWorkItem((state) =>
-                    {
-                        try
-                        {
-                            string cleanId = this.mySessionId.Replace(" ", "");
-                            string jsonPayload = string.Format("{{\"name\":\"{0}\",\"email\":\"{1}\",\"deviceId\":\"{2}\"}}",
-                                Uri.EscapeDataString(inputName), Uri.EscapeDataString(inputEmail), cleanId);
-                            byte[] data = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
-
-                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/auth/register");
-                            req.Method = "POST";
-                            req.ContentType = "application/json";
-                            req.ContentLength = data.Length;
-                            using (Stream stream = req.GetRequestStream())
-                            {
-                                stream.Write(data, 0, data.Length);
-                            }
-                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
-                        }
-                        catch { }
-                    });
-
-                    ShowModernDarkNotification(
-                        "Hesabınız Başarıyla Kaydedildi",
-                        "Tebrikler, " + userDisplayName + "!\n\n" +
-                        "✓ Topluluk hesabınız başarıyla oluşturuldu.\n" +
-                        "✓ Bu cihazınız (" + this.mySessionId + ") hesabınıza bağlandı.\n" +
-                        "✓ Adres defteriniz ve cihaz yönetimi aktif."
-                    );
-                }
-                else
-                {
-                    ShowModernDarkNotification("Geçersiz E-posta", "Lütfen geçerli bir e-posta adresi girin.");
-                }
-            };
-
-            pnlModalCard.Controls.Add(lblNameTag);
-            pnlModalCard.Controls.Add(txtRegFullName);
-            pnlModalCard.Controls.Add(lblEmailTag);
-            pnlModalCard.Controls.Add(txtRegEmail);
-            pnlModalCard.Controls.Add(btnSubmitDevam);
-
-            Label lblSsoDivider = new Label();
-            lblSsoDivider.Text = "──────────   Veya   ──────────";
-            lblSsoDivider.Font = new Font("Segoe UI", 8.5f);
-            lblSsoDivider.ForeColor = Color.FromArgb(71, 85, 105);
-            lblSsoDivider.Location = new Point(36, 266);
-            lblSsoDivider.Size = new Size(388, 18);
-            lblSsoDivider.TextAlign = ContentAlignment.MiddleCenter;
-            pnlModalCard.Controls.Add(lblSsoDivider);
-
-            Button btnSsoMicrosoft = CreateSsoButton("🪟   Microsoft ile devam et", 294, (s, e) => PerformSocialLogin("Microsoft"));
-            Button btnSsoGoogle = CreateSsoButton("🔴   Google ile devam et", 340, (s, e) => PerformSocialLogin("Google"));
-            Button btnSsoApple = CreateSsoButton("🍏   Apple ile devam et", 386, (s, e) => PerformSocialLogin("Apple"));
-
-            pnlModalCard.Controls.Add(btnSsoMicrosoft);
-            pnlModalCard.Controls.Add(btnSsoGoogle);
-            pnlModalCard.Controls.Add(btnSsoApple);
-
-            // Web Portal Direct Registration Link
-            Button btnWebRegisterDirect = new Button();
-            btnWebRegisterDirect.Text = "🌐   Web Portalı Üzerinden Kaydol / Giriş Yap";
-            btnWebRegisterDirect.Top = 432;
-            btnWebRegisterDirect.Left = 36;
-            btnWebRegisterDirect.Width = 388;
-            btnWebRegisterDirect.Height = 36;
-            btnWebRegisterDirect.FlatStyle = FlatStyle.Flat;
-            btnWebRegisterDirect.FlatAppearance.BorderColor = clrAccentCyan;
-            btnWebRegisterDirect.BackColor = clrInnerBox;
-            btnWebRegisterDirect.ForeColor = clrAccentCyan;
-            btnWebRegisterDirect.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-            btnWebRegisterDirect.Cursor = Cursors.Hand;
-            btnWebRegisterDirect.Click += (s, e) => {
-                string cleanId = this.mySessionId.Replace(" ", "");
-                System.Diagnostics.Process.Start(string.Format("https://my-aetherdesk-control.vercel.app/?action=register&device_id={0}", cleanId));
-            };
-            pnlModalCard.Controls.Add(btnWebRegisterDirect);
-
-            Label lblAlreadyAccount = new Label();
-            lblAlreadyAccount.Text = "Hesabınız var mı? Oturum aç";
-            lblAlreadyAccount.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-            lblAlreadyAccount.ForeColor = clrAccentCyan;
-            lblAlreadyAccount.Location = new Point(36, 476);
-            lblAlreadyAccount.Size = new Size(388, 24);
-            lblAlreadyAccount.TextAlign = ContentAlignment.MiddleCenter;
-            lblAlreadyAccount.Cursor = Cursors.Hand;
-            lblAlreadyAccount.Click += (s, e) => {
-                if (txtRegEmail.Text.Contains("@"))
-                {
-                    isLoggedIn = true;
-                    userEmail = txtRegEmail.Text.Trim();
-                    userDisplayName = string.IsNullOrEmpty(txtRegFullName.Text) ? userEmail.Split('@')[0] : txtRegFullName.Text.Trim();
-                    SaveAuthSettings();
-                    pnlAuthModalOverlay.Visible = false;
-                    pnlLeftHero.Invalidate();
-                    ShowModernDarkNotification("Giriş Yapıldı", "Oturumunuz başarıyla açıldı: " + userDisplayName);
-                }
-                else
-                {
-                    ShowModernDarkNotification("Bilgi", "Lütfen geçerli bir e-posta adresi yazıp 'Devam' butonuna basınız.");
-                }
-            };
-            pnlModalCard.Controls.Add(lblAlreadyAccount);
-        }
-
-        private Button CreateSsoButton(string title, int top, EventHandler onClick)
-        {
-            Button btn = new Button();
-            btn.Text = title;
-            btn.Top = top;
-            btn.Left = 36;
-            btn.Width = 388;
-            btn.Height = 38;
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderColor = clrBorder;
-            btn.BackColor = clrInnerBox;
-            btn.ForeColor = clrTextLight;
-            btn.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-            btn.TextAlign = ContentAlignment.MiddleCenter;
-            btn.Cursor = Cursors.Hand;
-            btn.Click += onClick;
-            return btn;
-        }
-
-        private void PerformSocialLogin(string provider)
-        {
-            string cleanId = this.mySessionId.Replace(" ", "");
-            isLoggedIn = true;
-            if (provider.ToLower() == "google")
-            {
-                userEmail = "tuncaysazan035@gmail.com";
-                userDisplayName = "Tuncay Sazan";
-            }
-            else
-            {
-                userEmail = provider.ToLower() + ".user@aetherdesk.com";
-                userDisplayName = provider + " Kullanıcısı";
-            }
-            SaveAuthSettings();
-            pnlAuthModalOverlay.Visible = false;
-            pnlLeftHero.Invalidate();
-
-            // 1. Notify cloud relay to register user & device
-            ThreadPool.QueueUserWorkItem((state) =>
-            {
-                try
-                {
-                    string jsonPayload = string.Format("{{\"provider\":\"{0}\",\"name\":\"{1}\",\"email\":\"{2}\",\"deviceId\":\"{3}\"}}",
-                        provider, userDisplayName, userEmail, cleanId);
-                    byte[] data = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
-
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(CLOUD_RELAY_URL + "/api/auth/sso");
-                    req.Method = "POST";
-                    req.ContentType = "application/json";
-                    req.ContentLength = data.Length;
-                    using (Stream stream = req.GetRequestStream())
-                    {
-                        stream.Write(data, 0, data.Length);
-                    }
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse()) { }
-                }
-                catch { }
-            });
-
-            // 2. Open official web auth portal or Google Account Chooser (Image 2)
-            string webUrl = provider.ToLower() == "google"
-                ? string.Format("https://my-aetherdesk-control.vercel.app/?action=google&device_id={0}", cleanId)
-                : string.Format("https://my-aetherdesk-control.vercel.app/?action=register&provider={0}&device_id={1}", provider.ToLower(), cleanId);
-
-            try
-            {
-                System.Diagnostics.Process.Start(webUrl);
-            }
-            catch { }
-
-            ShowModernDarkNotification(
-                provider + " Doğrulaması",
-                provider + " kimlik doğrulaması tarayıcınızda açıldı.\n\n" +
-                "✓ Google hesap seçici ekranı açıldı.\n" +
-                "✓ Cihaz Kimliğiniz (" + this.mySessionId + ") " + userDisplayName + " hesabınıza bağlandı."
-            );
-        }
 
         private void ShowModernDarkNotification(string title, string message)
         {
@@ -1044,8 +788,14 @@ namespace AetherDesk.Agent
 
         private void ShowAuthModal()
         {
-            pnlAuthModalOverlay.Visible = true;
-            pnlAuthModalOverlay.BringToFront();
+            try
+            {
+                string cleanId = this.mySessionId.Replace(" ", "");
+                string webUrl = string.Format("https://my-aetherdesk-control.vercel.app/?action=register&device_id={0}", cleanId);
+                System.Diagnostics.Process.Start(webUrl);
+                ShowModernDarkNotification("Web Portalı Açıldı", "AetherDesk bulut oturum açma & kayıt sayfası tarayıcınızda açıldı.");
+            }
+            catch { }
         }
 
         // -----------------------------------------------------------------------------------
