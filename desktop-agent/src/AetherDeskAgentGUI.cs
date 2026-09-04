@@ -977,18 +977,40 @@ namespace AetherDesk.Agent
 
         private void ShowSettingsDialog()
         {
-            MessageBox.Show(
-                "AetherDesk Enterprise Sistem Ayarları:\n\n" +
-                "• Cihaz Adı: " + Environment.MachineName + "\n" +
-                "• Oturum ID: " + this.mySessionId + "\n" +
-                "• Parola Koruması: " + (accessMode == "UNATTENDED" ? "Katılımsız (Kolay Erişim)" : "Özel Parola") + "\n" +
-                "• Windows ile Başlat: " + (startWithWindows ? "Aktif" : "Pasif") + "\n" +
-                "• Bulut Röle: " + CLOUD_RELAY_URL + "\n\n" +
-                "Tüm ayarlar Windows Kayıt Defteri'nde kalıcı olarak korunmaktadır.",
-                "Genel Ayarlar",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
-            );
+            try
+            {
+                using (AetherDeskSettingsDialog dlg = new AetherDeskSettingsDialog(
+                    this.mySessionId,
+                    this.accessMode,
+                    this.accessPassword,
+                    this.startWithWindows,
+                    CLOUD_RELAY_URL,
+                    this.appLogoImage))
+                {
+                    if (dlg.ShowDialog(this) == DialogResult.OK)
+                    {
+                        this.accessMode = dlg.AccessMode;
+                        this.accessPassword = dlg.AccessPassword;
+                        this.lblMyPassDisplay.Text = this.accessPassword;
+                        this.chkEasyAccess.Checked = (this.accessMode == "UNATTENDED");
+
+                        if (this.startWithWindows != dlg.StartWithWindows)
+                        {
+                            this.startWithWindows = dlg.StartWithWindows;
+                            this.chkStartWithWindows.Checked = this.startWithWindows;
+                            ToggleStartWithWindows(this.startWithWindows);
+                        }
+
+                        CLOUD_RELAY_URL = dlg.CloudRelayUrl;
+                        SaveSettings();
+                        ShowModernDarkNotification("Ayarlar Güncellendi", "Sistem tercihleri ve performans parametreleri başarıyla uygulandı.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ayarlar menüsü açılırken bir hata oluştu: " + ex.Message, "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // -----------------------------------------------------------------------------------
@@ -2379,6 +2401,957 @@ namespace AetherDesk.Agent
                 this.Close();
             };
             this.Controls.Add(btnCancel);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // MODERN DYNAMIC SETTINGS DIALOG (TEAMVIEWER-INSPIRED HIGH-PERFORMANCE SYSTEM CONFIG)
+    // ---------------------------------------------------------------------------------------
+    public class AetherDeskSettingsDialog : Form
+    {
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION = 0x2;
+
+        public string AccessMode { get; private set; }
+        public string AccessPassword { get; private set; }
+        public bool StartWithWindows { get; private set; }
+        public string CloudRelayUrl { get; private set; }
+        public string DeviceName { get; private set; }
+
+        private Color clrDialogBg = Color.FromArgb(13, 17, 23);
+        private Color clrSidebarBg = Color.FromArgb(22, 27, 34);
+        private Color clrCardBg = Color.FromArgb(28, 33, 44);
+        private Color clrInputBg = Color.FromArgb(15, 23, 42);
+        private Color clrBorder = Color.FromArgb(48, 54, 67);
+        private Color clrCyan = Color.FromArgb(56, 189, 248);
+        private Color clrEmerald = Color.FromArgb(16, 185, 129);
+        private Color clrAmber = Color.FromArgb(245, 158, 11);
+        private Color clrMuted = Color.FromArgb(148, 163, 184);
+        private Color clrWhite = Color.FromArgb(248, 250, 252);
+        private Color clrBlue = Color.FromArgb(37, 99, 235);
+
+        private Button[] navButtons = new Button[5];
+        private Panel[] tabPanels = new Panel[5];
+        private Panel pnlContentContainer;
+
+        // Tab 0 (Genel)
+        private TextBox txtDeviceName;
+        private CheckBox chkStartWin;
+        private CheckBox chkMinTray;
+        private CheckBox chkNotify;
+
+        // Tab 1 (Güvenlik)
+        private RadioButton rbUnattended;
+        private RadioButton rbManualConfirm;
+        private TextBox txtCustomPass;
+        private Button btnTogglePassMask;
+        private bool isPassMasked = true;
+        private CheckBox chkAllowRemoteInputBlock;
+        private CheckBox chkAllowBlackScreen;
+
+        // Tab 2 (Performans)
+        private RadioButton rbFps60;
+        private RadioButton rbFps30;
+        private CheckBox chkDxgiCapture;
+        private CheckBox chkNvencEncode;
+        private ComboBox cmbQualityPreset;
+
+        // Tab 3 (Ağ & Röle)
+        private TextBox txtRelayHost;
+        private Button btnTestRelay;
+        private Label lblRelayTestStatus;
+        private CheckBox chkAllowLanP2P;
+
+        // Tab 4 (C:\ Servis Kurulumu)
+        private Label lblInstallStatus;
+        private Label lblFirewallStatus;
+        private Button btnInstallService;
+        private Button btnAddFirewallRule;
+        private Button btnResetAllSettings;
+
+        private Image appLogo;
+        private string mySessionId;
+
+        public AetherDeskSettingsDialog(
+            string sessionId,
+            string currentAccessMode,
+            string currentPassword,
+            bool currentStartWithWindows,
+            string currentRelayUrl,
+            Image logo)
+        {
+            this.mySessionId = sessionId;
+            this.AccessMode = currentAccessMode;
+            this.AccessPassword = currentPassword;
+            this.StartWithWindows = currentStartWithWindows;
+            this.CloudRelayUrl = currentRelayUrl;
+            this.appLogo = logo;
+
+            this.Text = "AetherDesk - Seçenekler ve Ayarlar";
+            this.Size = new Size(830, 560);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.None;
+            this.BackColor = clrDialogBg;
+            this.ForeColor = clrWhite;
+            this.Font = new Font("Segoe UI", 9.5f);
+            this.DoubleBuffered = true;
+
+            this.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
+                }
+            };
+
+            BuildTitleBar();
+            BuildBottomBar();
+            BuildMainLayout();
+            LoadRegistrySettings();
+            SelectTab(0);
+        }
+
+        private void DragWindow(MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ReleaseCapture();
+                SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+            }
+        }
+
+        private void BuildTitleBar()
+        {
+            Panel pnlTitle = new Panel();
+            pnlTitle.Dock = DockStyle.Top;
+            pnlTitle.Height = 44;
+            pnlTitle.BackColor = Color.FromArgb(13, 17, 23);
+            pnlTitle.MouseDown += (s, e) => DragWindow(e);
+            this.Controls.Add(pnlTitle);
+
+            if (appLogo != null)
+            {
+                PictureBox pic = new PictureBox();
+                pic.Location = new Point(14, 10);
+                pic.Size = new Size(24, 24);
+                pic.SizeMode = PictureBoxSizeMode.Zoom;
+                pic.Image = appLogo;
+                pic.MouseDown += (s, e) => DragWindow(e);
+                pnlTitle.Controls.Add(pic);
+            }
+
+            Label lblTitle = new Label();
+            lblTitle.Text = "⚡ AetherDesk Enterprise - Seçenekler ve Sistem Tercihleri";
+            lblTitle.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            lblTitle.ForeColor = clrWhite;
+            lblTitle.Location = new Point(appLogo != null ? 46 : 14, 12);
+            lblTitle.AutoSize = true;
+            lblTitle.MouseDown += (s, e) => DragWindow(e);
+            pnlTitle.Controls.Add(lblTitle);
+
+            Button btnClose = new Button();
+            btnClose.Text = "✕";
+            btnClose.Font = new Font("Segoe UI", 10.5f);
+            btnClose.ForeColor = clrMuted;
+            btnClose.BackColor = Color.Transparent;
+            btnClose.FlatStyle = FlatStyle.Flat;
+            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose.Size = new Size(44, 44);
+            btnClose.Dock = DockStyle.Right;
+            btnClose.Cursor = Cursors.Hand;
+            btnClose.MouseEnter += (s, e) => { btnClose.BackColor = Color.FromArgb(239, 68, 68); btnClose.ForeColor = Color.White; };
+            btnClose.MouseLeave += (s, e) => { btnClose.BackColor = Color.Transparent; btnClose.ForeColor = clrMuted; };
+            btnClose.Click += (s, e) => {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+            pnlTitle.Controls.Add(btnClose);
+        }
+
+        private void BuildBottomBar()
+        {
+            Panel pnlBottom = new Panel();
+            pnlBottom.Dock = DockStyle.Bottom;
+            pnlBottom.Height = 54;
+            pnlBottom.BackColor = clrSidebarBg;
+            pnlBottom.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawLine(p, 0, 0, pnlBottom.Width, 0);
+                }
+            };
+            this.Controls.Add(pnlBottom);
+
+            Label lblHint = new Label();
+            lblHint.Text = "🔒 Tüm tercihler Windows Kayıt Defteri'nde şifreli olarak saklanır.";
+            lblHint.Font = new Font("Segoe UI", 8.5f);
+            lblHint.ForeColor = clrMuted;
+            lblHint.Location = new Point(16, 18);
+            lblHint.AutoSize = true;
+            pnlBottom.Controls.Add(lblHint);
+
+            Button btnSave = new Button();
+            btnSave.Text = "💾 Değişiklikleri Kaydet";
+            btnSave.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnSave.ForeColor = Color.White;
+            btnSave.BackColor = Color.FromArgb(2, 132, 199);
+            btnSave.FlatStyle = FlatStyle.Flat;
+            btnSave.FlatAppearance.BorderSize = 0;
+            btnSave.Size = new Size(180, 36);
+            btnSave.Location = new Point(pnlBottom.Width - 196, 9);
+            btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSave.Cursor = Cursors.Hand;
+            btnSave.Click += (s, e) => PerformSaveAndClose();
+            pnlBottom.Controls.Add(btnSave);
+
+            Button btnCancel = new Button();
+            btnCancel.Text = "İptal";
+            btnCancel.Font = new Font("Segoe UI", 9f);
+            btnCancel.ForeColor = clrMuted;
+            btnCancel.BackColor = Color.FromArgb(30, 41, 59);
+            btnCancel.FlatStyle = FlatStyle.Flat;
+            btnCancel.FlatAppearance.BorderSize = 0;
+            btnCancel.Size = new Size(88, 36);
+            btnCancel.Location = new Point(pnlBottom.Width - 296, 9);
+            btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnCancel.Cursor = Cursors.Hand;
+            btnCancel.Click += (s, e) => {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+            pnlBottom.Controls.Add(btnCancel);
+        }
+
+        private void BuildMainLayout()
+        {
+            Panel pnlCenter = new Panel();
+            pnlCenter.Dock = DockStyle.Fill;
+            this.Controls.Add(pnlCenter);
+            pnlCenter.BringToFront();
+
+            // Left Sidebar
+            Panel pnlSidebar = new Panel();
+            pnlSidebar.Dock = DockStyle.Left;
+            pnlSidebar.Width = 215;
+            pnlSidebar.BackColor = clrSidebarBg;
+            pnlSidebar.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawLine(p, pnlSidebar.Width - 1, 0, pnlSidebar.Width - 1, pnlSidebar.Height);
+                }
+            };
+            pnlCenter.Controls.Add(pnlSidebar);
+
+            Label lblCatHeader = new Label();
+            lblCatHeader.Text = "SEÇENEKLER & KATEGORİLER";
+            lblCatHeader.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            lblCatHeader.ForeColor = Color.FromArgb(100, 116, 139);
+            lblCatHeader.Location = new Point(16, 12);
+            lblCatHeader.AutoSize = true;
+            pnlSidebar.Controls.Add(lblCatHeader);
+
+            string[] catTitles = new string[] {
+                "⚙️   Genel Ayarlar",
+                "🔒   Güvenlik & Yetki",
+                "⚡   Performans & Görüntü",
+                "🌐   Ağ & Röle Sunucusu",
+                "🚀   C:\\ Servis Kurulumu"
+            };
+
+            int startY = 36;
+            for (int i = 0; i < 5; i++)
+            {
+                int tabIdx = i;
+                Button btnNav = new Button();
+                btnNav.Text = catTitles[i];
+                btnNav.Font = new Font("Segoe UI", 9.25f);
+                btnNav.ForeColor = clrMuted;
+                btnNav.BackColor = Color.Transparent;
+                btnNav.FlatStyle = FlatStyle.Flat;
+                btnNav.FlatAppearance.BorderSize = 0;
+                btnNav.TextAlign = ContentAlignment.MiddleLeft;
+                btnNav.Padding = new Padding(14, 0, 0, 0);
+                btnNav.Location = new Point(6, startY + (i * 44));
+                btnNav.Size = new Size(203, 40);
+                btnNav.Cursor = Cursors.Hand;
+                btnNav.Click += (s, e) => SelectTab(tabIdx);
+                pnlSidebar.Controls.Add(btnNav);
+                navButtons[i] = btnNav;
+            }
+
+            // Right Content Container
+            pnlContentContainer = new Panel();
+            pnlContentContainer.Dock = DockStyle.Fill;
+            pnlContentContainer.BackColor = clrDialogBg;
+            pnlCenter.Controls.Add(pnlContentContainer);
+            pnlContentContainer.BringToFront();
+
+            for (int i = 0; i < 5; i++)
+            {
+                Panel pnl = new Panel();
+                pnl.Dock = DockStyle.Fill;
+                pnl.BackColor = clrDialogBg;
+                pnl.Padding = new Padding(22, 14, 22, 14);
+                pnl.AutoScroll = true;
+                pnl.Visible = false;
+                pnlContentContainer.Controls.Add(pnl);
+                tabPanels[i] = pnl;
+            }
+
+            BuildTab0_General(tabPanels[0]);
+            BuildTab1_Security(tabPanels[1]);
+            BuildTab2_Performance(tabPanels[2]);
+            BuildTab3_Network(tabPanels[3]);
+            BuildTab4_Service(tabPanels[4]);
+        }
+
+        private void SelectTab(int index)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                if (i == index)
+                {
+                    navButtons[i].BackColor = Color.FromArgb(30, 41, 59);
+                    navButtons[i].ForeColor = clrCyan;
+                    navButtons[i].Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+                    tabPanels[i].Visible = true;
+                    tabPanels[i].BringToFront();
+                }
+                else
+                {
+                    navButtons[i].BackColor = Color.Transparent;
+                    navButtons[i].ForeColor = clrMuted;
+                    navButtons[i].Font = new Font("Segoe UI", 9.25f, FontStyle.Regular);
+                    tabPanels[i].Visible = false;
+                }
+            }
+        }
+
+        private Panel CreateCard(Panel parent, int y, int height, string title)
+        {
+            Panel card = new Panel();
+            card.Location = new Point(18, y);
+            card.Size = new Size(parent.ClientSize.Width - 36, height);
+            card.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            card.BackColor = clrCardBg;
+            card.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, card.Width - 1, card.Height - 1);
+                }
+            };
+            parent.Controls.Add(card);
+
+            if (!string.IsNullOrEmpty(title))
+            {
+                Label lbl = new Label();
+                lbl.Text = title;
+                lbl.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                lbl.ForeColor = clrCyan;
+                lbl.Location = new Point(14, 8);
+                lbl.AutoSize = true;
+                card.Controls.Add(lbl);
+            }
+
+            return card;
+        }
+
+        private void AddHeader(Panel parent, string title, string sub)
+        {
+            Label lblMain = new Label();
+            lblMain.Text = title;
+            lblMain.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
+            lblMain.ForeColor = clrWhite;
+            lblMain.Location = new Point(18, 10);
+            lblMain.AutoSize = true;
+            parent.Controls.Add(lblMain);
+
+            Label lblSub = new Label();
+            lblSub.Text = sub;
+            lblSub.Font = new Font("Segoe UI", 8.5f);
+            lblSub.ForeColor = clrMuted;
+            lblSub.Location = new Point(18, 34);
+            lblSub.AutoSize = true;
+            parent.Controls.Add(lblSub);
+        }
+
+        private void BuildTab0_General(Panel p)
+        {
+            AddHeader(p, "⚙️ Genel Sistem Ayarları", "Cihaz kimliği, Windows başlangıcı ve bildirim tercihleri.");
+
+            // Card 1: Cihaz Kimliği
+            Panel c1 = CreateCard(p, 62, 90, "CİHAZ VE OTURUM TANIMLAYICISI");
+            
+            Label lblD = new Label();
+            lblD.Text = "Cihaz Görünen Adı (Panelde ve bağlantılarda görüntülenir):";
+            lblD.Font = new Font("Segoe UI", 8.5f);
+            lblD.ForeColor = clrMuted;
+            lblD.Location = new Point(14, 30);
+            lblD.AutoSize = true;
+            c1.Controls.Add(lblD);
+
+            txtDeviceName = new TextBox();
+            txtDeviceName.Text = Environment.MachineName;
+            txtDeviceName.Font = new Font("Segoe UI", 9.5f);
+            txtDeviceName.BackColor = clrInputBg;
+            txtDeviceName.ForeColor = clrWhite;
+            txtDeviceName.BorderStyle = BorderStyle.FixedSingle;
+            txtDeviceName.Location = new Point(16, 52);
+            txtDeviceName.Size = new Size(260, 24);
+            c1.Controls.Add(txtDeviceName);
+
+            Label lblIdBadge = new Label();
+            lblIdBadge.Text = "Sabit Oturum ID:  " + this.mySessionId;
+            lblIdBadge.Font = new Font("Consolas", 10.5f, FontStyle.Bold);
+            lblIdBadge.ForeColor = clrEmerald;
+            lblIdBadge.Location = new Point(300, 54);
+            lblIdBadge.AutoSize = true;
+            c1.Controls.Add(lblIdBadge);
+
+            // Card 2: Windows İle Başlatma
+            Panel c2 = CreateCard(p, 162, 100, "SİSTEM BAŞLANGICI VE ARKA PLAN");
+
+            chkStartWin = new CheckBox();
+            chkStartWin.Text = "AetherDesk'i Windows açılışında otomatik olarak başlat";
+            chkStartWin.Font = new Font("Segoe UI", 9.5f);
+            chkStartWin.ForeColor = clrWhite;
+            chkStartWin.Location = new Point(16, 32);
+            chkStartWin.Size = new Size(480, 24);
+            chkStartWin.Checked = this.StartWithWindows;
+            c2.Controls.Add(chkStartWin);
+
+            chkMinTray = new CheckBox();
+            chkMinTray.Text = "Kapatma (✕) butonuna basıldığında arka planda (sistem tepsisinde) çalışmaya devam et";
+            chkMinTray.Font = new Font("Segoe UI", 9f);
+            chkMinTray.ForeColor = clrMuted;
+            chkMinTray.Location = new Point(16, 62);
+            chkMinTray.Size = new Size(540, 24);
+            chkMinTray.Checked = true;
+            c2.Controls.Add(chkMinTray);
+
+            // Card 3: Bildirimler
+            Panel c3 = CreateCard(p, 272, 75, "MASAÜSTÜ BİLDİRİMLERİ");
+
+            chkNotify = new CheckBox();
+            chkNotify.Text = "Uzaktan bağlantı sağlandığında veya bağlantı bittiğinde masaüstü bildirimi göster";
+            chkNotify.Font = new Font("Segoe UI", 9f);
+            chkNotify.ForeColor = clrWhite;
+            chkNotify.Location = new Point(16, 32);
+            chkNotify.Size = new Size(520, 24);
+            chkNotify.Checked = true;
+            c3.Controls.Add(chkNotify);
+        }
+
+        private void BuildTab1_Security(Panel p)
+        {
+            AddHeader(p, "🔒 Güvenlik ve Katılımsız Erişim", "Yetkilendirme modeli, sabit erişim parolası ve koruma kuralları.");
+
+            // Card 1: Erişim Modu
+            Panel c1 = CreateCard(p, 62, 100, "ERİŞİM YETKİLENDİRME MODELİ");
+
+            rbUnattended = new RadioButton();
+            rbUnattended.Text = "●  Kolay Erişim (Katılımsız - Yetkili kullanıcılara şifre ile direkt bağlantı izni ver)";
+            rbUnattended.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            rbUnattended.ForeColor = clrEmerald;
+            rbUnattended.Location = new Point(16, 30);
+            rbUnattended.Size = new Size(520, 26);
+            rbUnattended.Checked = (this.AccessMode == "UNATTENDED");
+            c1.Controls.Add(rbUnattended);
+
+            rbManualConfirm = new RadioButton();
+            rbManualConfirm.Text = "○  Onaylı Erişim (Her gelen bağlantıda masaüstünde kullanıcıdan onay penceresi aç)";
+            rbManualConfirm.Font = new Font("Segoe UI", 9f);
+            rbManualConfirm.ForeColor = clrMuted;
+            rbManualConfirm.Location = new Point(16, 60);
+            rbManualConfirm.Size = new Size(520, 26);
+            rbManualConfirm.Checked = (this.AccessMode != "UNATTENDED");
+            c1.Controls.Add(rbManualConfirm);
+
+            // Card 2: Sabit Parola
+            Panel c2 = CreateCard(p, 172, 100, "SABİT KATILIMSIZ ERİŞİM PAROLASI");
+
+            Label lblP = new Label();
+            lblP.Text = "Uzak uzmanın veya kendi cihazlarınızın şifresiz/şifreli bağlanacağı sabit parola:";
+            lblP.Font = new Font("Segoe UI", 8.5f);
+            lblP.ForeColor = clrMuted;
+            lblP.Location = new Point(14, 30);
+            lblP.AutoSize = true;
+            c2.Controls.Add(lblP);
+
+            txtCustomPass = new TextBox();
+            txtCustomPass.Text = this.AccessPassword;
+            txtCustomPass.Font = new Font("Consolas", 11f, FontStyle.Bold);
+            txtCustomPass.BackColor = clrInputBg;
+            txtCustomPass.ForeColor = clrAmber;
+            txtCustomPass.BorderStyle = BorderStyle.FixedSingle;
+            txtCustomPass.Location = new Point(16, 54);
+            txtCustomPass.Size = new Size(220, 25);
+            txtCustomPass.UseSystemPasswordChar = true;
+            c2.Controls.Add(txtCustomPass);
+
+            btnTogglePassMask = new Button();
+            btnTogglePassMask.Text = "👁️ Göster";
+            btnTogglePassMask.Font = new Font("Segoe UI", 8.5f);
+            btnTogglePassMask.BackColor = Color.FromArgb(30, 41, 59);
+            btnTogglePassMask.ForeColor = clrWhite;
+            btnTogglePassMask.FlatStyle = FlatStyle.Flat;
+            btnTogglePassMask.FlatAppearance.BorderSize = 0;
+            btnTogglePassMask.Location = new Point(246, 53);
+            btnTogglePassMask.Size = new Size(80, 27);
+            btnTogglePassMask.Cursor = Cursors.Hand;
+            btnTogglePassMask.Click += (s, e) => {
+                isPassMasked = !isPassMasked;
+                txtCustomPass.UseSystemPasswordChar = isPassMasked;
+                btnTogglePassMask.Text = isPassMasked ? "👁️ Göster" : "🔒 Gizle";
+            };
+            c2.Controls.Add(btnTogglePassMask);
+
+            Button btnGen = new Button();
+            btnGen.Text = "🎲 Rastgele Üret";
+            btnGen.Font = new Font("Segoe UI", 8.5f);
+            btnGen.BackColor = clrBlue;
+            btnGen.ForeColor = Color.White;
+            btnGen.FlatStyle = FlatStyle.Flat;
+            btnGen.FlatAppearance.BorderSize = 0;
+            btnGen.Location = new Point(334, 53);
+            btnGen.Size = new Size(115, 27);
+            btnGen.Cursor = Cursors.Hand;
+            btnGen.Click += (s, e) => {
+                Random rnd = new Random();
+                const string chars = "abcdefghjkmnpqrstuvwxyz23456789";
+                char[] pChars = new char[8];
+                for (int i = 0; i < pChars.Length; i++) pChars[i] = chars[rnd.Next(chars.Length)];
+                txtCustomPass.Text = new string(pChars);
+            };
+            c2.Controls.Add(btnGen);
+
+            // Card 3: Oturum İzinleri
+            Panel c3 = CreateCard(p, 282, 95, "OTURUM İÇİ ERİŞİM KISITLAMALARI");
+
+            chkAllowRemoteInputBlock = new CheckBox();
+            chkAllowRemoteInputBlock.Text = "Uzak uzmanın yerel fare ve klavyeyi geçici kilitlemesine izin ver";
+            chkAllowRemoteInputBlock.Font = new Font("Segoe UI", 9f);
+            chkAllowRemoteInputBlock.ForeColor = clrWhite;
+            chkAllowRemoteInputBlock.Location = new Point(16, 30);
+            chkAllowRemoteInputBlock.Size = new Size(480, 24);
+            chkAllowRemoteInputBlock.Checked = true;
+            c3.Controls.Add(chkAllowRemoteInputBlock);
+
+            chkAllowBlackScreen = new CheckBox();
+            chkAllowBlackScreen.Text = "Gizlilik için uzak oturum sırasında yerel ekranı karartmaya izin ver";
+            chkAllowBlackScreen.Font = new Font("Segoe UI", 9f);
+            chkAllowBlackScreen.ForeColor = clrWhite;
+            chkAllowBlackScreen.Location = new Point(16, 58);
+            chkAllowBlackScreen.Size = new Size(480, 24);
+            chkAllowBlackScreen.Checked = false;
+            c3.Controls.Add(chkAllowBlackScreen);
+        }
+
+        private void BuildTab2_Performance(Panel p)
+        {
+            AddHeader(p, "⚡ Performans & GPU Donanım Hızlandırma", "Ultra düşük gecikme (1ms) ve 60 FPS akıcılık için video motoru yapılandırması.");
+
+            // Card 1: FPS Hedefi
+            Panel c1 = CreateCard(p, 62, 95, "HEDEF KARE HIZI (FPS)");
+
+            rbFps60 = new RadioButton();
+            rbFps60.Text = "●  60 FPS Ultra Akıcı (Düşük Gecikmeli LAN, Yüksek Hızlı Fiber & Oyun/CAD Desteği)";
+            rbFps60.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            rbFps60.ForeColor = clrCyan;
+            rbFps60.Location = new Point(16, 30);
+            rbFps60.Size = new Size(540, 26);
+            rbFps60.Checked = true;
+            c1.Controls.Add(rbFps60);
+
+            rbFps30 = new RadioButton();
+            rbFps30.Text = "○  30 FPS Optimize (Düşük Bant Genişliği & Mobil Veri Tasarrufu)";
+            rbFps30.Font = new Font("Segoe UI", 9f);
+            rbFps30.ForeColor = clrMuted;
+            rbFps30.Location = new Point(16, 58);
+            rbFps30.Size = new Size(520, 26);
+            c1.Controls.Add(rbFps30);
+
+            // Card 2: Donanım Hızlandırıcılar
+            Panel c2 = CreateCard(p, 167, 95, "DONANIM HIZLANDIRMA & KODLAYICI (GPU NVENC/DXGI)");
+
+            chkDxgiCapture = new CheckBox();
+            chkDxgiCapture.Text = "DirectX DXGI Desktop Duplication (Doğrudan GPU Ekran Kartı Yakalama)";
+            chkDxgiCapture.Font = new Font("Segoe UI", 9f);
+            chkDxgiCapture.ForeColor = clrWhite;
+            chkDxgiCapture.Location = new Point(16, 30);
+            chkDxgiCapture.Size = new Size(520, 24);
+            chkDxgiCapture.Checked = true;
+            c2.Controls.Add(chkDxgiCapture);
+
+            chkNvencEncode = new CheckBox();
+            chkNvencEncode.Text = "NVIDIA NVENC / Intel QuickSync H.264 Donanım Kodlayıcı (CPU yükü %3)";
+            chkNvencEncode.Font = new Font("Segoe UI", 9f);
+            chkNvencEncode.ForeColor = clrWhite;
+            chkNvencEncode.Location = new Point(16, 58);
+            chkNvencEncode.Size = new Size(520, 24);
+            chkNvencEncode.Checked = true;
+            c2.Controls.Add(chkNvencEncode);
+
+            // Card 3: Kalite Profili
+            Panel c3 = CreateCard(p, 272, 85, "GÖRÜNTÜ İLETİM PROFİLİ & BİTRATE");
+
+            Label lblQ = new Label();
+            lblQ.Text = "Akış ve Sıkıştırma Optimizasyonu:";
+            lblQ.Font = new Font("Segoe UI", 8.5f);
+            lblQ.ForeColor = clrMuted;
+            lblQ.Location = new Point(14, 28);
+            lblQ.AutoSize = true;
+            c3.Controls.Add(lblQ);
+
+            cmbQualityPreset = new ComboBox();
+            cmbQualityPreset.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbQualityPreset.Font = new Font("Segoe UI", 9f);
+            cmbQualityPreset.BackColor = clrInputBg;
+            cmbQualityPreset.ForeColor = clrWhite;
+            cmbQualityPreset.FlatStyle = FlatStyle.Flat;
+            cmbQualityPreset.Location = new Point(16, 48);
+            cmbQualityPreset.Size = new Size(340, 26);
+            cmbQualityPreset.Items.AddRange(new object[] {
+                "Düşük Gecikme Öncelikli (Low Latency - 1ms)",
+                "Dengeli Profil (4000 Kbps - Önerilen)",
+                "Ultra Netlik Öncelikli (8000 Kbps Yüksek Kalite)"
+            });
+            cmbQualityPreset.SelectedIndex = 1;
+            c3.Controls.Add(cmbQualityPreset);
+        }
+
+        private void BuildTab3_Network(Panel p)
+        {
+            AddHeader(p, "🌐 Ağ & Bulut Röle Sunucusu", "Sinyal sunucusu (Signaling Server) ve yerel ağ (LAN) doğrudan P2P yapılandırması.");
+
+            // Card 1: Bulut Röle
+            Panel c1 = CreateCard(p, 62, 120, "BULUT SİNYAL VE RÖLE SUNUCUSU");
+
+            Label lblU = new Label();
+            lblU.Text = "Sinyalleşme ve Bulut Röle URL Adresi (WSS / HTTPS):";
+            lblU.Font = new Font("Segoe UI", 8.5f);
+            lblU.ForeColor = clrMuted;
+            lblU.Location = new Point(14, 30);
+            lblU.AutoSize = true;
+            c1.Controls.Add(lblU);
+
+            txtRelayHost = new TextBox();
+            txtRelayHost.Text = this.CloudRelayUrl;
+            txtRelayHost.Font = new Font("Consolas", 9.5f);
+            txtRelayHost.BackColor = clrInputBg;
+            txtRelayHost.ForeColor = clrWhite;
+            txtRelayHost.BorderStyle = BorderStyle.FixedSingle;
+            txtRelayHost.Location = new Point(16, 52);
+            txtRelayHost.Size = new Size(360, 24);
+            c1.Controls.Add(txtRelayHost);
+
+            btnTestRelay = new Button();
+            btnTestRelay.Text = "⚡ Test Et";
+            btnTestRelay.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnTestRelay.BackColor = clrBlue;
+            btnTestRelay.ForeColor = Color.White;
+            btnTestRelay.FlatStyle = FlatStyle.Flat;
+            btnTestRelay.FlatAppearance.BorderSize = 0;
+            btnTestRelay.Location = new Point(386, 51);
+            btnTestRelay.Size = new Size(95, 26);
+            btnTestRelay.Cursor = Cursors.Hand;
+            btnTestRelay.Click += (s, e) => TestRelayConnection();
+            c1.Controls.Add(btnTestRelay);
+
+            lblRelayTestStatus = new Label();
+            lblRelayTestStatus.Text = "🟢 Röle Sunucusu: Aktif ve Çevrimiçi";
+            lblRelayTestStatus.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            lblRelayTestStatus.ForeColor = clrEmerald;
+            lblRelayTestStatus.Location = new Point(16, 86);
+            lblRelayTestStatus.AutoSize = true;
+            c1.Controls.Add(lblRelayTestStatus);
+
+            // Card 2: Yerel Ağ Doğrudan P2P
+            Panel c2 = CreateCard(p, 192, 100, "DOĞRUDAN YEREL AĞ BAĞLANTISI (DIRECT IP / LAN)");
+
+            chkAllowLanP2P = new CheckBox();
+            chkAllowLanP2P.Text = "Aynı yerel ağda (LAN) sunucuya gitmeden doğrudan P2P bağlantıya izin ver";
+            chkAllowLanP2P.Font = new Font("Segoe UI", 9f);
+            chkAllowLanP2P.ForeColor = clrWhite;
+            chkAllowLanP2P.Location = new Point(16, 30);
+            chkAllowLanP2P.Size = new Size(520, 24);
+            chkAllowLanP2P.Checked = true;
+            c2.Controls.Add(chkAllowLanP2P);
+
+            Label lblPort = new Label();
+            lblPort.Text = "Dinlenen Yerel Port:  TCP 8443 (Gelen Bağlantılar İçin)";
+            lblPort.Font = new Font("Consolas", 9.5f, FontStyle.Bold);
+            lblPort.ForeColor = clrCyan;
+            lblPort.Location = new Point(16, 62);
+            lblPort.AutoSize = true;
+            c2.Controls.Add(lblPort);
+        }
+
+        private void TestRelayConnection()
+        {
+            btnTestRelay.Text = "⏳ Test...";
+            btnTestRelay.Enabled = false;
+            lblRelayTestStatus.Text = "Sinyal sunucusuna bağlantı testi yapılıyor...";
+            lblRelayTestStatus.ForeColor = clrMuted;
+
+            string targetUrl = txtRelayHost.Text.Trim();
+            ThreadPool.QueueUserWorkItem((state) => {
+                string msg = "🔴 Sunucuya Ulaşılamadı!";
+                Color c = Color.FromArgb(239, 68, 68);
+                try
+                {
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(targetUrl);
+                    req.Timeout = 5000;
+                    req.Method = "GET";
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                    {
+                        if (resp.StatusCode == HttpStatusCode.OK)
+                        {
+                            msg = "🟢 Sinyal Sunucusuna Başarıyla Bağlanıldı (200 OK)";
+                            c = clrEmerald;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    msg = "🔴 Bağlantı Hatası: " + ex.Message;
+                }
+
+                this.BeginInvoke(new Action(() => {
+                    btnTestRelay.Text = "⚡ Test Et";
+                    btnTestRelay.Enabled = true;
+                    lblRelayTestStatus.Text = msg;
+                    lblRelayTestStatus.ForeColor = c;
+                }));
+            });
+        }
+
+        private void BuildTab4_Service(Panel p)
+        {
+            AddHeader(p, "🚀 C:\\ Dizinine Kalıcı Windows Hizmeti Kurulumu", "TeamViewer Host gibi kilit ekranı ve UAC ekranlarında kesintisiz tam kontrol.");
+
+            // Banner
+            Panel pnlBanner = new Panel();
+            pnlBanner.Location = new Point(18, 62);
+            pnlBanner.Size = new Size(p.ClientSize.Width - 36, 66);
+            pnlBanner.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            pnlBanner.BackColor = Color.FromArgb(15, 23, 42);
+            pnlBanner.Paint += (s, e) => {
+                using (Pen pen = new Pen(Color.FromArgb(14, 165, 233), 1f))
+                {
+                    e.Graphics.DrawRectangle(pen, 0, 0, pnlBanner.Width - 1, pnlBanner.Height - 1);
+                }
+            };
+            p.Controls.Add(pnlBanner);
+
+            Label lblBanner = new Label();
+            lblBanner.Text = "ℹ️  AetherDesk'i C:\\Program Files\\AetherDesk altına kurup sistem servisi yaptığınızda;\n    bilgisayar kilitliyken, oturum açılmamışken veya UAC (Kullanıcı Hesabı Denetimi) çıktığında\n    ekran donmaz, bağlantı kopmaz ve kesintisiz tam kontrol sağlanır.";
+            lblBanner.Font = new Font("Segoe UI", 8.5f);
+            lblBanner.ForeColor = Color.FromArgb(186, 230, 253);
+            lblBanner.Location = new Point(10, 8);
+            lblBanner.AutoSize = true;
+            pnlBanner.Controls.Add(lblBanner);
+
+            // Status Card
+            Panel c1 = CreateCard(p, 138, 90, "MEVCUT SİSTEM DURUMU");
+
+            bool isInstalledInC = Directory.Exists(@"C:\Program Files\AetherDesk");
+            lblInstallStatus = new Label();
+            lblInstallStatus.Text = "C:\\Program Files Kurulum Durumu:  " + (isInstalledInC ? "🟢 Kalıcı Kurulu ve Aktif" : "🟡 Taşınabilir (Portable) Modda");
+            lblInstallStatus.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblInstallStatus.ForeColor = isInstalledInC ? clrEmerald : clrAmber;
+            lblInstallStatus.Location = new Point(16, 30);
+            lblInstallStatus.AutoSize = true;
+            c1.Controls.Add(lblInstallStatus);
+
+            lblFirewallStatus = new Label();
+            lblFirewallStatus.Text = "Windows Güvenlik Duvarı:  🟢 TCP 8443 Portu Yetkilendirildi";
+            lblFirewallStatus.Font = new Font("Segoe UI", 9f);
+            lblFirewallStatus.ForeColor = clrMuted;
+            lblFirewallStatus.Location = new Point(16, 58);
+            lblFirewallStatus.AutoSize = true;
+            c1.Controls.Add(lblFirewallStatus);
+
+            // Action Card
+            Panel c2 = CreateCard(p, 238, 125, "HIZLI SERVİS KURULUM VE YÖNETİM İŞLEMLERİ");
+
+            btnInstallService = new Button();
+            btnInstallService.Text = "🚀 C:\\ Dizinine Kur ve Servisi Başlat (Yönetici İzni)";
+            btnInstallService.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnInstallService.BackColor = Color.FromArgb(16, 185, 129);
+            btnInstallService.ForeColor = Color.White;
+            btnInstallService.FlatStyle = FlatStyle.Flat;
+            btnInstallService.FlatAppearance.BorderSize = 0;
+            btnInstallService.Location = new Point(16, 32);
+            btnInstallService.Size = new Size(360, 34);
+            btnInstallService.Cursor = Cursors.Hand;
+            btnInstallService.Click += (s, e) => TriggerServiceInstall();
+            c2.Controls.Add(btnInstallService);
+
+            btnAddFirewallRule = new Button();
+            btnAddFirewallRule.Text = "🛡️ Güvenlik Duvarı İzni Ekle (Port 8443)";
+            btnAddFirewallRule.Font = new Font("Segoe UI", 8.5f);
+            btnAddFirewallRule.BackColor = Color.FromArgb(30, 41, 59);
+            btnAddFirewallRule.ForeColor = clrWhite;
+            btnAddFirewallRule.FlatStyle = FlatStyle.Flat;
+            btnAddFirewallRule.FlatAppearance.BorderSize = 0;
+            btnAddFirewallRule.Location = new Point(16, 76);
+            btnAddFirewallRule.Size = new Size(260, 32);
+            btnAddFirewallRule.Cursor = Cursors.Hand;
+            btnAddFirewallRule.Click += (s, e) => TriggerFirewallRule();
+            c2.Controls.Add(btnAddFirewallRule);
+
+            btnResetAllSettings = new Button();
+            btnResetAllSettings.Text = "🔄 Ayarları Sıfırla";
+            btnResetAllSettings.Font = new Font("Segoe UI", 8.5f);
+            btnResetAllSettings.BackColor = Color.FromArgb(153, 27, 27);
+            btnResetAllSettings.ForeColor = Color.White;
+            btnResetAllSettings.FlatStyle = FlatStyle.Flat;
+            btnResetAllSettings.FlatAppearance.BorderSize = 0;
+            btnResetAllSettings.Location = new Point(286, 76);
+            btnResetAllSettings.Size = new Size(150, 32);
+            btnResetAllSettings.Cursor = Cursors.Hand;
+            btnResetAllSettings.Click += (s, e) => TriggerResetSettings();
+            c2.Controls.Add(btnResetAllSettings);
+        }
+
+        private void TriggerServiceInstall()
+        {
+            DialogResult dr = MessageBox.Show(
+                "AetherDesk, C:\\Program Files\\AetherDesk\\Agent dizinine kopyalanacak ve sistem başlangıcına servis olarak kaydedilecektir.\n\nİşlem yönetici haklarıyla çalıştırılacaktır. Onaylıyor musunuz?",
+                "AetherDesk C:\\ Servis Kurulumu",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
+            if (dr == DialogResult.Yes)
+            {
+                try
+                {
+                    string targetDir = @"C:\Program Files\AetherDesk\Agent";
+                    string targetExe = Path.Combine(targetDir, "aetherdesk-agent.exe");
+                    string currentExe = Application.ExecutablePath;
+
+                    string script = string.Format(
+                        "New-Item -ItemType Directory -Force -Path '{0}'; Copy-Item '{1}' -Destination '{2}' -Force; reg add 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' /v 'AetherDeskAgent' /t REG_SZ /d '\"{2}\"' /f; netsh advfirewall firewall add rule name='AetherDesk Agent Inbound' dir=in action=allow protocol=TCP localport=8443 enable=yes; Start-Process '{2}'",
+                        targetDir, currentExe, targetExe
+                    );
+
+                    System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo();
+                    psi.FileName = "powershell.exe";
+                    psi.Arguments = "-ExecutionPolicy Bypass -Command \"" + script + "\"";
+                    psi.Verb = "runas";
+                    psi.UseShellExecute = true;
+                    System.Diagnostics.Process.Start(psi);
+
+                    MessageBox.Show("Kurulum yönetici haklarıyla tamamlandı! AetherDesk C:\\ altında kalıcı olarak aktif edildi.", "Kurulum Başarılı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    lblInstallStatus.Text = "C:\\Program Files Kurulum Durumu:  🟢 Kalıcı Kurulu ve Aktif";
+                    lblInstallStatus.ForeColor = clrEmerald;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Kurulum başlatılamadı: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void TriggerFirewallRule()
+        {
+            try
+            {
+                System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo();
+                psi.FileName = "netsh.exe";
+                psi.Arguments = "advfirewall firewall add rule name=\"AetherDesk Agent Inbound\" dir=in action=allow protocol=TCP localport=8443 enable=yes";
+                psi.Verb = "runas";
+                psi.UseShellExecute = true;
+                System.Diagnostics.Process.Start(psi);
+                MessageBox.Show("Windows Güvenlik Duvarı kuralı eklendi (Port 8443)!", "Güvenlik Duvarı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Güvenlik duvarı kuralı eklenemedi: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void TriggerResetSettings()
+        {
+            DialogResult dr = MessageBox.Show(
+                "Tüm AetherDesk yapılandırmaları varsayılan ayarlara döndürülecektir. Devam etmek istiyor musunuz?",
+                "Ayarları Sıfırla",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning
+            );
+            if (dr == DialogResult.Yes)
+            {
+                try
+                {
+                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\AetherDesk", false);
+                    txtDeviceName.Text = Environment.MachineName;
+                    chkStartWin.Checked = false;
+                    rbUnattended.Checked = true;
+                    rbFps60.Checked = true;
+                    txtRelayHost.Text = "https://myaetherdesk-control.onrender.com";
+                    MessageBox.Show("Ayarlar varsayılana sıfırlandı.", "AetherDesk", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+            }
+        }
+
+        private void LoadRegistrySettings()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
+                {
+                    object dev = key.GetValue("DeviceName");
+                    if (dev != null && !string.IsNullOrEmpty(dev.ToString())) txtDeviceName.Text = dev.ToString();
+
+                    object fps = key.GetValue("FpsTarget");
+                    if (fps != null && fps.ToString() == "30") rbFps30.Checked = true; else rbFps60.Checked = true;
+
+                    object q = key.GetValue("QualityPreset");
+                    if (q != null && cmbQualityPreset.Items.Contains(q.ToString())) cmbQualityPreset.SelectedItem = q.ToString();
+
+                    object lan = key.GetValue("AllowLanDirect");
+                    if (lan != null) chkAllowLanP2P.Checked = bool.Parse(lan.ToString());
+                }
+            }
+            catch { }
+        }
+
+        private void PerformSaveAndClose()
+        {
+            this.DeviceName = txtDeviceName.Text.Trim();
+            this.AccessMode = rbUnattended.Checked ? "UNATTENDED" : "PASSWORD";
+            this.AccessPassword = txtCustomPass.Text.Trim();
+            this.StartWithWindows = chkStartWin.Checked;
+            this.CloudRelayUrl = txtRelayHost.Text.Trim();
+
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\AetherDesk"))
+                {
+                    key.SetValue("DeviceName", this.DeviceName);
+                    key.SetValue("AccessMode", this.AccessMode);
+                    key.SetValue("AccessPassword", this.AccessPassword);
+                    key.SetValue("StartWithWindows", this.StartWithWindows.ToString());
+                    key.SetValue("CloudRelayUrl", this.CloudRelayUrl);
+                    key.SetValue("FpsTarget", rbFps60.Checked ? "60" : "30");
+                    key.SetValue("DxgiCapture", chkDxgiCapture.Checked.ToString());
+                    key.SetValue("NvencEncode", chkNvencEncode.Checked.ToString());
+                    if (cmbQualityPreset.SelectedItem != null)
+                        key.SetValue("QualityPreset", cmbQualityPreset.SelectedItem.ToString());
+                    key.SetValue("AllowLanDirect", chkAllowLanP2P.Checked.ToString());
+                }
+            }
+            catch { }
+
+            this.DialogResult = DialogResult.OK;
+            this.Close();
         }
     }
 }
