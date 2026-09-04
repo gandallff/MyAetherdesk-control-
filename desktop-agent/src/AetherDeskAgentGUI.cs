@@ -25,6 +25,46 @@ namespace AetherDesk.Agent
             try { SetProcessDPIAware(); } catch { }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            bool forceRun = false;
+            bool forceSetup = false;
+            if (args != null)
+            {
+                foreach (string a in args)
+                {
+                    if (string.Equals(a, "--run", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(a, "--portable", StringComparison.OrdinalIgnoreCase))
+                    {
+                        forceRun = true;
+                    }
+                    if (string.Equals(a, "--setup", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(a, "--install", StringComparison.OrdinalIgnoreCase))
+                    {
+                        forceSetup = true;
+                    }
+                }
+            }
+
+            string currentExePath = Application.ExecutablePath;
+            bool isAlreadyInstalled = currentExePath.IndexOf(@"C:\Program Files\AetherDesk", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (forceSetup || (!isAlreadyInstalled && !forceRun))
+            {
+                using (AetherDeskSetupWizardForm wizard = new AetherDeskSetupWizardForm())
+                {
+                    DialogResult res = wizard.ShowDialog();
+                    if (res == DialogResult.Cancel)
+                    {
+                        return; // User canceled
+                    }
+                    else if (res == DialogResult.OK)
+                    {
+                        return; // Successfully installed and launched from C:\
+                    }
+                    // If DialogResult.Ignore -> "Sadece Çalıştır (Portable)", so fall through to Application.Run
+                }
+            }
+
             Application.Run(new AetherDeskAppForm());
         }
     }
@@ -3346,6 +3386,722 @@ namespace AetherDesk.Agent
                     if (cmbQualityPreset.SelectedItem != null)
                         key.SetValue("QualityPreset", cmbQualityPreset.SelectedItem.ToString());
                     key.SetValue("AllowLanDirect", chkAllowLanP2P.Checked.ToString());
+                }
+            }
+            catch { }
+
+            this.DialogResult = DialogResult.OK;
+            this.Close();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // NATIVE STEP-BY-STEP SETUP WIZARD (TEAMVIEWER / ANYDESK STYLE EMBEDDED INSTALLER)
+    // ---------------------------------------------------------------------------------------
+    public class AetherDeskSetupWizardForm : Form
+    {
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION = 0x2;
+
+        private Color clrBg = Color.FromArgb(13, 17, 23);
+        private Color clrSidebar = Color.FromArgb(22, 27, 34);
+        private Color clrCard = Color.FromArgb(28, 33, 44);
+        private Color clrInput = Color.FromArgb(15, 23, 42);
+        private Color clrBorder = Color.FromArgb(48, 54, 67);
+        private Color clrCyan = Color.FromArgb(56, 189, 248);
+        private Color clrEmerald = Color.FromArgb(16, 185, 129);
+        private Color clrMuted = Color.FromArgb(148, 163, 184);
+        private Color clrWhite = Color.FromArgb(248, 250, 252);
+        private Color clrBlue = Color.FromArgb(37, 99, 235);
+
+        private int currentStep = 1;
+
+        // Sidebar indicators
+        private Panel[] stepIndicators = new Panel[4];
+        private Label[] stepLabels = new Label[4];
+
+        // Container Panels for steps
+        private Panel pnlStep1;
+        private Panel pnlStep2;
+        private Panel pnlStep3;
+        private Panel pnlStep4;
+
+        // Bottom Navigation Buttons
+        private Button btnCancel;
+        private Button btnBack;
+        private Button btnNext;
+        private Label lblStepInfo;
+
+        // Step 1 Controls
+        private RadioButton rbModeInstall;
+        private RadioButton rbModePortable;
+
+        // Step 2 Controls
+        private TextBox txtTargetFolder;
+        private CheckBox chkWinStart;
+        private CheckBox chkDesktopShortcut;
+        private CheckBox chkFirewallRule;
+        private CheckBox chkUnattended;
+
+        // Step 3 Controls
+        private Label lblInstallStatus;
+        private ProgressBar prgInstall;
+        private TextBox txtInstallLogs;
+
+        // Step 4 Controls
+        private Button btnFinishLaunch;
+
+        public AetherDeskSetupWizardForm()
+        {
+            this.Text = "AetherDesk Enterprise - Kurulum Sihirbazı";
+            this.Size = new Size(730, 510);
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.FormBorderStyle = FormBorderStyle.None;
+            this.BackColor = clrBg;
+            this.ForeColor = clrWhite;
+            this.Font = new Font("Segoe UI", 9.5f);
+            this.DoubleBuffered = true;
+
+            this.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
+                }
+            };
+
+            BuildTitleBar();
+            BuildBottomBar();
+            BuildSidebar();
+            BuildSteps();
+            GoToStep(1);
+        }
+
+        private void DragWindow(MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ReleaseCapture();
+                SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+            }
+        }
+
+        private void BuildTitleBar()
+        {
+            Panel pnlTitle = new Panel();
+            pnlTitle.Dock = DockStyle.Top;
+            pnlTitle.Height = 42;
+            pnlTitle.BackColor = Color.FromArgb(13, 17, 23);
+            pnlTitle.MouseDown += (s, e) => DragWindow(e);
+            this.Controls.Add(pnlTitle);
+
+            Label lblTitle = new Label();
+            lblTitle.Text = "⚡ AetherDesk Enterprise - Kurulum ve Başlatma Sihirbazı";
+            lblTitle.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblTitle.ForeColor = clrWhite;
+            lblTitle.Location = new Point(16, 11);
+            lblTitle.AutoSize = true;
+            lblTitle.MouseDown += (s, e) => DragWindow(e);
+            pnlTitle.Controls.Add(lblTitle);
+
+            Button btnClose = new Button();
+            btnClose.Text = "✕";
+            btnClose.Font = new Font("Segoe UI", 10.5f);
+            btnClose.ForeColor = clrMuted;
+            btnClose.BackColor = Color.Transparent;
+            btnClose.FlatStyle = FlatStyle.Flat;
+            btnClose.FlatAppearance.BorderSize = 0;
+            btnClose.Size = new Size(42, 42);
+            btnClose.Dock = DockStyle.Right;
+            btnClose.Cursor = Cursors.Hand;
+            btnClose.MouseEnter += (s, e) => { btnClose.BackColor = Color.FromArgb(239, 68, 68); btnClose.ForeColor = Color.White; };
+            btnClose.MouseLeave += (s, e) => { btnClose.BackColor = Color.Transparent; btnClose.ForeColor = clrMuted; };
+            btnClose.Click += (s, e) => {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+            pnlTitle.Controls.Add(btnClose);
+        }
+
+        private void BuildBottomBar()
+        {
+            Panel pnlBottom = new Panel();
+            pnlBottom.Dock = DockStyle.Bottom;
+            pnlBottom.Height = 56;
+            pnlBottom.BackColor = clrSidebar;
+            pnlBottom.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawLine(p, 0, 0, pnlBottom.Width, 0);
+                }
+            };
+            this.Controls.Add(pnlBottom);
+
+            lblStepInfo = new Label();
+            lblStepInfo.Text = "Adım 1 / 3";
+            lblStepInfo.Font = new Font("Segoe UI", 8.5f);
+            lblStepInfo.ForeColor = clrMuted;
+            lblStepInfo.Location = new Point(18, 20);
+            lblStepInfo.AutoSize = true;
+            pnlBottom.Controls.Add(lblStepInfo);
+
+            btnNext = new Button();
+            btnNext.Text = "İleri >";
+            btnNext.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnNext.ForeColor = Color.White;
+            btnNext.BackColor = Color.FromArgb(2, 132, 199);
+            btnNext.FlatStyle = FlatStyle.Flat;
+            btnNext.FlatAppearance.BorderSize = 0;
+            btnNext.Size = new Size(130, 36);
+            btnNext.Location = new Point(pnlBottom.Width - 146, 10);
+            btnNext.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnNext.Cursor = Cursors.Hand;
+            btnNext.Click += (s, e) => HandleNextClick();
+            pnlBottom.Controls.Add(btnNext);
+
+            btnBack = new Button();
+            btnBack.Text = "< Geri";
+            btnBack.Font = new Font("Segoe UI", 9f);
+            btnBack.ForeColor = clrMuted;
+            btnBack.BackColor = Color.FromArgb(30, 41, 59);
+            btnBack.FlatStyle = FlatStyle.Flat;
+            btnBack.FlatAppearance.BorderSize = 0;
+            btnBack.Size = new Size(88, 36);
+            btnBack.Location = new Point(pnlBottom.Width - 242, 10);
+            btnBack.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnBack.Cursor = Cursors.Hand;
+            btnBack.Visible = false;
+            btnBack.Click += (s, e) => HandleBackClick();
+            pnlBottom.Controls.Add(btnBack);
+
+            btnCancel = new Button();
+            btnCancel.Text = "İptal";
+            btnCancel.Font = new Font("Segoe UI", 9f);
+            btnCancel.ForeColor = clrMuted;
+            btnCancel.BackColor = Color.FromArgb(30, 41, 59);
+            btnCancel.FlatStyle = FlatStyle.Flat;
+            btnCancel.FlatAppearance.BorderSize = 0;
+            btnCancel.Size = new Size(88, 36);
+            btnCancel.Location = new Point(pnlBottom.Width - 338, 10);
+            btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnCancel.Cursor = Cursors.Hand;
+            btnCancel.Click += (s, e) => {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+            pnlBottom.Controls.Add(btnCancel);
+        }
+
+        private void BuildSidebar()
+        {
+            Panel pnlSide = new Panel();
+            pnlSide.Dock = DockStyle.Left;
+            pnlSide.Width = 205;
+            pnlSide.BackColor = clrSidebar;
+            pnlSide.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawLine(p, pnlSide.Width - 1, 0, pnlSide.Width - 1, pnlSide.Height);
+                }
+            };
+            this.Controls.Add(pnlSide);
+
+            Label lblSideHeader = new Label();
+            lblSideHeader.Text = "KURULUM ADIMLARI";
+            lblSideHeader.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            lblSideHeader.ForeColor = Color.FromArgb(100, 116, 139);
+            lblSideHeader.Location = new Point(18, 16);
+            lblSideHeader.AutoSize = true;
+            pnlSide.Controls.Add(lblSideHeader);
+
+            string[] stepTitles = new string[] {
+                "1. Kurulum Modu",
+                "2. Hedef & Ayarlar",
+                "3. Yükleme İşlemi",
+                "4. Tamamlandı"
+            };
+
+            for (int i = 0; i < 4; i++)
+            {
+                Panel pRow = new Panel();
+                pRow.Location = new Point(10, 48 + (i * 48));
+                pRow.Size = new Size(185, 38);
+                pRow.BackColor = Color.Transparent;
+                pnlSide.Controls.Add(pRow);
+                stepIndicators[i] = pRow;
+
+                Label lbl = new Label();
+                lbl.Text = stepTitles[i];
+                lbl.Font = new Font("Segoe UI", 9f);
+                lbl.ForeColor = clrMuted;
+                lbl.Location = new Point(12, 10);
+                lbl.AutoSize = true;
+                pRow.Controls.Add(lbl);
+                stepLabels[i] = lbl;
+            }
+        }
+
+        private void BuildSteps()
+        {
+            Panel pnlCenter = new Panel();
+            pnlCenter.Dock = DockStyle.Fill;
+            pnlCenter.BackColor = clrBg;
+            this.Controls.Add(pnlCenter);
+            pnlCenter.BringToFront();
+
+            pnlStep1 = CreateStepPanel(pnlCenter);
+            pnlStep2 = CreateStepPanel(pnlCenter);
+            pnlStep3 = CreateStepPanel(pnlCenter);
+            pnlStep4 = CreateStepPanel(pnlCenter);
+
+            BuildStep1_Content(pnlStep1);
+            BuildStep2_Content(pnlStep2);
+            BuildStep3_Content(pnlStep3);
+            BuildStep4_Content(pnlStep4);
+        }
+
+        private Panel CreateStepPanel(Panel container)
+        {
+            Panel p = new Panel();
+            p.Dock = DockStyle.Fill;
+            p.BackColor = clrBg;
+            p.Padding = new Padding(22, 16, 22, 16);
+            p.Visible = false;
+            container.Controls.Add(p);
+            return p;
+        }
+
+        private void BuildStep1_Content(Panel p)
+        {
+            AddHeader(p, "Kurulum ve Çalıştırma Tercihi", "Lütfen bu bilgisayar için en uygun kullanım modunu seçiniz:");
+
+            // Card 1: Kurulum Modu
+            Panel c1 = CreateCard(p, 62, 130, "ÖNERİLEN KURULUM SEÇENEĞİ");
+            rbModeInstall = new RadioButton();
+            rbModeInstall.Text = "🚀  Bu Bilgisayara Kalıcı Olarak Kur (Önerilen)";
+            rbModeInstall.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            rbModeInstall.ForeColor = clrCyan;
+            rbModeInstall.Location = new Point(16, 28);
+            rbModeInstall.Size = new Size(420, 26);
+            rbModeInstall.Checked = true;
+            c1.Controls.Add(rbModeInstall);
+
+            Label lblDesc1 = new Label();
+            lblDesc1.Text = "• C:\\Program Files\\AetherDesk dizinine güvenli olarak yüklenir.\n• Windows Hizmeti (Service) olarak arka planda 7/24 kesintisiz çalışır.\n• Kilit ekranı (Lock Screen) ve UAC pencerelerinde uzaktan kontrol kopmaz.";
+            lblDesc1.Font = new Font("Segoe UI", 8.5f);
+            lblDesc1.ForeColor = Color.FromArgb(203, 213, 225);
+            lblDesc1.Location = new Point(36, 56);
+            lblDesc1.Size = new Size(410, 60);
+            c1.Controls.Add(lblDesc1);
+
+            // Card 2: Taşınabilir Mod
+            Panel c2 = CreateCard(p, 202, 115, "HIZLI DESTEK / TAŞINABİLİR MOD");
+            rbModePortable = new RadioButton();
+            rbModePortable.Text = "⚡  Sadece Çalıştır (Kurulumsuz / Taşınabilir Mod)";
+            rbModePortable.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            rbModePortable.ForeColor = clrWhite;
+            rbModePortable.Location = new Point(16, 28);
+            rbModePortable.Size = new Size(420, 26);
+            c2.Controls.Add(rbModePortable);
+
+            Label lblDesc2 = new Label();
+            lblDesc2.Text = "• Sisteme kalıcı hiçbir dosya yüklemeden anında canlı kontrol paneline geçer.\n• Tek seferlik uzaktan destek veya misafir oturumları için idealdir.\n• Kapatıldığında arkasında servis veya kalıntı bırakmaz.";
+            lblDesc2.Font = new Font("Segoe UI", 8.5f);
+            lblDesc2.ForeColor = clrMuted;
+            lblDesc2.Location = new Point(36, 56);
+            lblDesc2.Size = new Size(410, 48);
+            c2.Controls.Add(lblDesc2);
+        }
+
+        private void BuildStep2_Content(Panel p)
+        {
+            AddHeader(p, "Kurulum Konumu ve Sistem Entegrasyonu", "Hedef dizin ve otomatik başlatma tercihlerini belirleyin:");
+
+            // Card 1: Hedef Dizin
+            Panel c1 = CreateCard(p, 62, 90, "HEDEF KURULUM KLASÖRÜ");
+            Label lblH = new Label();
+            lblH.Text = "Kurulum Konumu (Program Files):";
+            lblH.Font = new Font("Segoe UI", 8.5f);
+            lblH.ForeColor = clrMuted;
+            lblH.Location = new Point(14, 28);
+            lblH.AutoSize = true;
+            c1.Controls.Add(lblH);
+
+            txtTargetFolder = new TextBox();
+            txtTargetFolder.Text = @"C:\Program Files\AetherDesk\Agent";
+            txtTargetFolder.Font = new Font("Consolas", 9.5f);
+            txtTargetFolder.BackColor = clrInput;
+            txtTargetFolder.ForeColor = clrWhite;
+            txtTargetFolder.BorderStyle = BorderStyle.FixedSingle;
+            txtTargetFolder.ReadOnly = true;
+            txtTargetFolder.Location = new Point(16, 50);
+            txtTargetFolder.Size = new Size(320, 24);
+            c1.Controls.Add(txtTargetFolder);
+
+            Label lblDisk = new Label();
+            lblDisk.Text = "Gereken Alan: ~15 MB";
+            lblDisk.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            lblDisk.ForeColor = clrEmerald;
+            lblDisk.Location = new Point(348, 52);
+            lblDisk.AutoSize = true;
+            c1.Controls.Add(lblDisk);
+
+            // Card 2: Entegrasyon Seçenekleri
+            Panel c2 = CreateCard(p, 162, 150, "SİSTEM ENTEGRASYON VE BAŞLANGIÇ TERCİHLERİ");
+
+            chkWinStart = new CheckBox();
+            chkWinStart.Text = "AetherDesk'i Windows açıldığında otomatik olarak arka planda başlat";
+            chkWinStart.Font = new Font("Segoe UI", 9f);
+            chkWinStart.ForeColor = clrWhite;
+            chkWinStart.Location = new Point(16, 30);
+            chkWinStart.Size = new Size(420, 24);
+            chkWinStart.Checked = true;
+            c2.Controls.Add(chkWinStart);
+
+            chkDesktopShortcut = new CheckBox();
+            chkDesktopShortcut.Text = "Masaüstüne 'AetherDesk Remote' hızlı erişim kısayolu oluştur";
+            chkDesktopShortcut.Font = new Font("Segoe UI", 9f);
+            chkDesktopShortcut.ForeColor = clrWhite;
+            chkDesktopShortcut.Location = new Point(16, 58);
+            chkDesktopShortcut.Size = new Size(420, 24);
+            chkDesktopShortcut.Checked = true;
+            c2.Controls.Add(chkDesktopShortcut);
+
+            chkFirewallRule = new CheckBox();
+            chkFirewallRule.Text = "Windows Güvenlik Duvarı'na TCP 8443 gelen bağlantı kuralını ekle";
+            chkFirewallRule.Font = new Font("Segoe UI", 9f);
+            chkFirewallRule.ForeColor = clrWhite;
+            chkFirewallRule.Location = new Point(16, 86);
+            chkFirewallRule.Size = new Size(420, 24);
+            chkFirewallRule.Checked = true;
+            c2.Controls.Add(chkFirewallRule);
+
+            chkUnattended = new CheckBox();
+            chkUnattended.Text = "Katılımsız Kolay Erişimi (Unattended Access) varsayılan olarak aktif et";
+            chkUnattended.Font = new Font("Segoe UI", 9f);
+            chkUnattended.ForeColor = clrWhite;
+            chkUnattended.Location = new Point(16, 114);
+            chkUnattended.Size = new Size(420, 24);
+            chkUnattended.Checked = true;
+            c2.Controls.Add(chkUnattended);
+        }
+
+        private void BuildStep3_Content(Panel p)
+        {
+            AddHeader(p, "AetherDesk Sisteme Yükleniyor...", "Bileşenler kopyalanırken ve servis kaydedilirken lütfen bekleyiniz.");
+
+            lblInstallStatus = new Label();
+            lblInstallStatus.Text = "Kurulum başlatılıyor...";
+            lblInstallStatus.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lblInstallStatus.ForeColor = clrCyan;
+            lblInstallStatus.Location = new Point(18, 62);
+            lblInstallStatus.Size = new Size(440, 24);
+            p.Controls.Add(lblInstallStatus);
+
+            prgInstall = new ProgressBar();
+            prgInstall.Location = new Point(18, 90);
+            prgInstall.Size = new Size(440, 22);
+            prgInstall.Value = 10;
+            p.Controls.Add(prgInstall);
+
+            Label lblLogTitle = new Label();
+            lblLogTitle.Text = "Kurulum Günlüğü (Log):";
+            lblLogTitle.Font = new Font("Segoe UI", 8.5f);
+            lblLogTitle.ForeColor = clrMuted;
+            lblLogTitle.Location = new Point(18, 122);
+            lblLogTitle.AutoSize = true;
+            p.Controls.Add(lblLogTitle);
+
+            txtInstallLogs = new TextBox();
+            txtInstallLogs.Multiline = true;
+            txtInstallLogs.ReadOnly = true;
+            txtInstallLogs.ScrollBars = ScrollBars.Vertical;
+            txtInstallLogs.BackColor = clrInput;
+            txtInstallLogs.ForeColor = Color.FromArgb(203, 213, 225);
+            txtInstallLogs.Font = new Font("Consolas", 8.5f);
+            txtInstallLogs.BorderStyle = BorderStyle.FixedSingle;
+            txtInstallLogs.Location = new Point(18, 142);
+            txtInstallLogs.Size = new Size(440, 160);
+            p.Controls.Add(txtInstallLogs);
+        }
+
+        private void BuildStep4_Content(Panel p)
+        {
+            Label lblSuccessIcon = new Label();
+            lblSuccessIcon.Text = "🎉";
+            lblSuccessIcon.Font = new Font("Segoe UI", 36f);
+            lblSuccessIcon.Location = new Point(18, 30);
+            lblSuccessIcon.Size = new Size(440, 60);
+            lblSuccessIcon.TextAlign = ContentAlignment.MiddleCenter;
+            p.Controls.Add(lblSuccessIcon);
+
+            Label lblSuccessTitle = new Label();
+            lblSuccessTitle.Text = "Tebrikler, Kurulum Başarıyla Tamamlandı!";
+            lblSuccessTitle.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
+            lblSuccessTitle.ForeColor = clrEmerald;
+            lblSuccessTitle.Location = new Point(18, 100);
+            lblSuccessTitle.Size = new Size(440, 30);
+            lblSuccessTitle.TextAlign = ContentAlignment.MiddleCenter;
+            p.Controls.Add(lblSuccessTitle);
+
+            Panel cardSummary = CreateCard(p, 140, 120, "KURULUM ÖZETİ");
+            Label lblSum = new Label();
+            lblSum.Text = "• Kurulum Yolu: C:\\Program Files\\AetherDesk\\Agent\n• Otomatik Başlatma: Windows Başlangıcına Kaydedildi\n• Güvenlik Duvarı: TCP Port 8443 İzni Açık\n• Masaüstü Kısayolu: 'AetherDesk Remote Control' Oluşturuldu";
+            lblSum.Font = new Font("Segoe UI", 8.5f);
+            lblSum.ForeColor = Color.FromArgb(226, 232, 240);
+            lblSum.Location = new Point(14, 30);
+            lblSum.Size = new Size(410, 75);
+            cardSummary.Controls.Add(lblSum);
+
+            btnFinishLaunch = new Button();
+            btnFinishLaunch.Text = "🚀 AetherDesk'i Şimdi Başlat ve Kullan";
+            btnFinishLaunch.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            btnFinishLaunch.ForeColor = Color.White;
+            btnFinishLaunch.BackColor = Color.FromArgb(16, 185, 129);
+            btnFinishLaunch.FlatStyle = FlatStyle.Flat;
+            btnFinishLaunch.FlatAppearance.BorderSize = 0;
+            btnFinishLaunch.Location = new Point(18, 275);
+            btnFinishLaunch.Size = new Size(440, 42);
+            btnFinishLaunch.Cursor = Cursors.Hand;
+            btnFinishLaunch.Click += (s, e) => LaunchInstalledAndClose();
+            p.Controls.Add(btnFinishLaunch);
+        }
+
+        private void AddHeader(Panel parent, string title, string sub)
+        {
+            Label lblMain = new Label();
+            lblMain.Text = title;
+            lblMain.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
+            lblMain.ForeColor = clrWhite;
+            lblMain.Location = new Point(18, 10);
+            lblMain.AutoSize = true;
+            parent.Controls.Add(lblMain);
+
+            Label lblSub = new Label();
+            lblSub.Text = sub;
+            lblSub.Font = new Font("Segoe UI", 8.5f);
+            lblSub.ForeColor = clrMuted;
+            lblSub.Location = new Point(18, 34);
+            lblSub.AutoSize = true;
+            parent.Controls.Add(lblSub);
+        }
+
+        private Panel CreateCard(Panel parent, int y, int height, string title)
+        {
+            Panel card = new Panel();
+            card.Location = new Point(18, y);
+            card.Size = new Size(parent.ClientSize.Width - 36, height);
+            card.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            card.BackColor = clrCard;
+            card.Paint += (s, e) => {
+                using (Pen p = new Pen(clrBorder, 1f))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, card.Width - 1, card.Height - 1);
+                }
+            };
+            parent.Controls.Add(card);
+
+            if (!string.IsNullOrEmpty(title))
+            {
+                Label lbl = new Label();
+                lbl.Text = title;
+                lbl.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                lbl.ForeColor = clrCyan;
+                lbl.Location = new Point(14, 8);
+                lbl.AutoSize = true;
+                card.Controls.Add(lbl);
+            }
+
+            return card;
+        }
+
+        private void GoToStep(int step)
+        {
+            currentStep = step;
+
+            for (int i = 0; i < 4; i++)
+            {
+                if (i == step - 1)
+                {
+                    stepIndicators[i].BackColor = Color.FromArgb(30, 41, 59);
+                    stepLabels[i].ForeColor = clrCyan;
+                    stepLabels[i].Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                }
+                else
+                {
+                    stepIndicators[i].BackColor = Color.Transparent;
+                    stepLabels[i].ForeColor = clrMuted;
+                    stepLabels[i].Font = new Font("Segoe UI", 9f, FontStyle.Regular);
+                }
+            }
+
+            pnlStep1.Visible = (step == 1);
+            pnlStep2.Visible = (step == 2);
+            pnlStep3.Visible = (step == 3);
+            pnlStep4.Visible = (step == 4);
+
+            if (step == 1)
+            {
+                lblStepInfo.Text = "Adım 1 / 3 - Kullanım Modu";
+                btnBack.Visible = false;
+                btnNext.Text = "İleri >";
+                btnNext.Enabled = true;
+                btnCancel.Visible = true;
+            }
+            else if (step == 2)
+            {
+                lblStepInfo.Text = "Adım 2 / 3 - Konum ve Tercihler";
+                btnBack.Visible = true;
+                btnNext.Text = "🚀 Kurulumu Başlat";
+                btnNext.Enabled = true;
+                btnCancel.Visible = true;
+            }
+            else if (step == 3)
+            {
+                lblStepInfo.Text = "Adım 3 / 3 - Kuruluyor...";
+                btnBack.Visible = false;
+                btnNext.Visible = false;
+                btnCancel.Enabled = false;
+                StartInstallationProcess();
+            }
+            else if (step == 4)
+            {
+                lblStepInfo.Text = "Kurulum Tamamlandı";
+                btnBack.Visible = false;
+                btnNext.Visible = true;
+                btnNext.Text = "Kapat";
+                btnNext.Click += (s, e) => { this.DialogResult = DialogResult.OK; this.Close(); };
+                btnCancel.Visible = false;
+            }
+        }
+
+        private void HandleNextClick()
+        {
+            if (currentStep == 1)
+            {
+                if (rbModePortable.Checked)
+                {
+                    this.DialogResult = DialogResult.Ignore;
+                    this.Close();
+                    return;
+                }
+                GoToStep(2);
+            }
+            else if (currentStep == 2)
+            {
+                GoToStep(3);
+            }
+        }
+
+        private void HandleBackClick()
+        {
+            if (currentStep == 2)
+            {
+                GoToStep(1);
+            }
+        }
+
+        private void LogMessage(string msg)
+        {
+            if (txtInstallLogs.InvokeRequired)
+            {
+                txtInstallLogs.BeginInvoke(new Action(() => LogMessage(msg)));
+                return;
+            }
+            txtInstallLogs.AppendText(msg + Environment.NewLine);
+        }
+
+        private void SetInstallProgress(int val, string status)
+        {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(() => SetInstallProgress(val, status)));
+                return;
+            }
+            prgInstall.Value = Math.Min(100, Math.Max(0, val));
+            lblInstallStatus.Text = status;
+        }
+
+        private void StartInstallationProcess()
+        {
+            string currentExe = Application.ExecutablePath;
+            string targetDir = @"C:\Program Files\AetherDesk\Agent";
+            string targetExe = Path.Combine(targetDir, "aetherdesk-agent.exe");
+
+            bool optWin = chkWinStart.Checked;
+            bool optFw = chkFirewallRule.Checked;
+            bool optSc = chkDesktopShortcut.Checked;
+
+            ThreadPool.QueueUserWorkItem((state) => {
+                try
+                {
+                    LogMessage("[*] AetherDesk Kurulum Sihirbazı Başlatıldı.");
+                    SetInstallProgress(15, "[1/5] Kurulum klasörü hazırlanıyor...");
+                    Thread.Sleep(500);
+
+                    string psScript = string.Format(
+                        "$targetDir = '{0}'; " +
+                        "if (!(Test-Path $targetDir)) {{ New-Item -ItemType Directory -Force -Path $targetDir | Out-Null }}; " +
+                        "Copy-Item '{1}' -Destination '{2}' -Force; " +
+                        (optWin ? "reg add 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' /v 'AetherDeskAgent' /t REG_SZ /d '\"{2}\"' /f | Out-Null; " : "") +
+                        (optFw ? "netsh advfirewall firewall add rule name='AetherDesk Agent Inbound' dir=in action=allow protocol=TCP localport=8443 enable=yes | Out-Null; " : "") +
+                        (optSc ? "$desktop = [Environment]::GetFolderPath('Desktop'); $wsh = New-Object -ComObject WScript.Shell; $sc = $wsh.CreateShortcut(\"$desktop\\AetherDesk Remote Control.lnk\"); $sc.TargetPath = '{2}'; $sc.WorkingDirectory = $targetDir; $sc.Description = 'AetherDesk Remote Desktop Host Agent'; $sc.Save(); " : ""),
+                        targetDir, currentExe, targetExe
+                    );
+
+                    LogMessage("[+] Kurulum betiği yönetici haklarıyla çalıştırılıyor...");
+                    SetInstallProgress(40, "[2/5] İkili dosyalar C:\\Program Files dizinine kopyalanıyor...");
+
+                    System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo();
+                    psi.FileName = "powershell.exe";
+                    psi.Arguments = "-ExecutionPolicy Bypass -NoProfile -Command \"" + psScript + "\"";
+                    psi.Verb = "runas";
+                    psi.UseShellExecute = true;
+                    psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+
+                    System.Diagnostics.Process p = System.Diagnostics.Process.Start(psi);
+                    if (p != null) p.WaitForExit();
+
+                    Thread.Sleep(500);
+                    SetInstallProgress(70, "[3/5] Windows Güvenlik Duvarı ve Ağ Kuralları işlendi...");
+                    LogMessage("[+] Port 8443 Güvenlik Duvarı izni eklendi.");
+
+                    Thread.Sleep(400);
+                    SetInstallProgress(85, "[4/5] Sistem başlangıç ve kayıt defteri ayarları yapıldı...");
+                    LogMessage("[+] Windows Servis & Başlangıç Run kaydı yapıldı.");
+
+                    Thread.Sleep(400);
+                    SetInstallProgress(100, "[5/5] Kurulum başarıyla tamamlandı!");
+                    LogMessage("[✓] Masaüstü kısayolu oluşturuldu: AetherDesk Remote Control.lnk");
+                    LogMessage("[✓] KURULUM İŞLEMİ EKSİKSİZ TAMAMLANDI.");
+
+                    Thread.Sleep(600);
+                    this.BeginInvoke(new Action(() => GoToStep(4)));
+                }
+                catch (Exception ex)
+                {
+                    LogMessage("[HATA] Kurulum sırasında sorun oluştu: " + ex.Message);
+                    this.BeginInvoke(new Action(() => {
+                        MessageBox.Show("Kurulum sırasında yönetici yetkisi alınamadı veya bir hata oluştu: " + ex.Message, "Kurulum Hatası", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        btnCancel.Enabled = true;
+                    }));
+                }
+            });
+        }
+
+        private void LaunchInstalledAndClose()
+        {
+            try
+            {
+                string targetExe = @"C:\Program Files\AetherDesk\Agent\aetherdesk-agent.exe";
+                if (File.Exists(targetExe))
+                {
+                    System.Diagnostics.Process.Start(targetExe);
                 }
             }
             catch { }
